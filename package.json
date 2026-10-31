@@ -2,7 +2,7 @@
   "name": "we-fart-together",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "directories": {
     "lib": "lib"
   },
