@@ -3,8 +3,11 @@ const ASSETS = [
   './',
   './index.html',
   './style.css',
+  './lib/three.min.js',
   './js/audio.js',
-  './js/renderer.js',
+  './js/models.js',
+  './js/particles.js',
+  './js/renderer3d.js',
   './js/client.js',
   './shared/levels.js',
   './manifest.json'

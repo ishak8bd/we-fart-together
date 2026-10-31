@@ -9,6 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
+  <!-- Three.js (3D WebGL Engine) -->
+  <script src="/lib/three.min.js"></script>
   <!-- Socket.IO Client -->
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -55,6 +57,9 @@
         </button>
       </div>
     </div>
+
+    <!-- Floating 2D/3D Overhead Nameplates -->
+    <div id="nameplates-container"></div>
 
     <!-- Center Toast Alert -->
     <div id="toast-banner" class="toast-banner hidden">CHECKPOINT!</div>
@@ -209,7 +214,9 @@
   <!-- Scripts -->
   <script src="/shared/levels.js"></script>
   <script src="/js/audio.js"></script>
-  <script src="/js/renderer.js"></script>
+  <script src="/js/models.js"></script>
+  <script src="/js/particles.js"></script>
+  <script src="/js/renderer3d.js"></script>
   <script src="/js/client.js"></script>
 </body>
 </html>

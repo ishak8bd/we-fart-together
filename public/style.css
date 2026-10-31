@@ -586,3 +586,36 @@ input[type="text"]:focus, select:focus {
 
 .stat-item .lbl { font-size: 0.65rem; color: #94a3b8; }
 .stat-item .val { font-size: 1.1rem; font-weight: 900; color: #facc15; }
+
+/* Floating Overhead Nameplates */
+#nameplates-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 12;
+}
+
+.nameplate {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(0, 0, 0, 0.75);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nameplate.p1 { color: #ffb74d; border-color: #ffb74d; }
+.nameplate.p2 { color: #81d4fa; border-color: #81d4fa; }
+.nameplate.p3 { color: #a5d6a7; border-color: #a5d6a7; }
+.nameplate.p4 { color: #ce93d8; border-color: #ce93d8; }
+

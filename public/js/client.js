@@ -6,7 +6,7 @@
 class ClientGameApp {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
-    this.renderer = new CanvasRenderer(this.canvas);
+    this.renderer = new Renderer3D(this.canvas);
 
     // Player Identification
     this.playerToken = localStorage.getItem('wft_player_token') || this.generateToken();
