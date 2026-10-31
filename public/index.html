@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>We Fart Together — Mobile Co-op Raft Game</title>
+  <meta name="theme-color" content="#29b6f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <!-- Socket.IO Client -->
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+  <!-- Rotate Phone to Landscape Overlay -->
+  <div id="rotate-overlay" class="rotate-overlay">
+    <div class="rotate-box">
+      <div class="rotate-phone-icon">📱 ➔ 📲</div>
+      <h2>ROTATE YOUR PHONE</h2>
+      <p>We Fart Together is locked to landscape for the best river co-op experience!</p>
+    </div>
+  </div>
+
+  <!-- Main Game Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD Overlay -->
+  <div id="hud" class="hud-layer hidden">
+    <div class="hud-top-bar">
+      <div class="hud-card ping-card">
+        <span>⚡</span>
+        <span id="hud-ping">--ms</span>
+      </div>
+
+      <div class="hud-card timer-card">
+        <span>⏱️</span>
+        <span id="hud-timer">00:00.00</span>
+      </div>
+
+      <div class="hud-card checkpoint-card">
+        <span class="hud-sub">CHECKPOINT</span>
+        <span id="hud-checkpoint">1 / 4</span>
+      </div>
+
+      <div class="hud-card room-badge">
+        <span class="hud-sub">ROOM</span>
+        <span id="hud-room-code">----</span>
+      </div>
+
+      <div class="hud-actions">
+        <button id="btn-sound-toggle" class="hud-btn" title="Toggle Sound">
+          <span id="sound-icon">🔊</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Toast Alert -->
+    <div id="toast-banner" class="toast-banner hidden">CHECKPOINT!</div>
+  </div>
+
+  <!-- Mobile Touch Controls -->
+  <div id="controls-layer" class="controls-layer hidden">
+    <!-- Left Virtual Touch Joystick -->
+    <div class="control-zone left-zone">
+      <div id="touch-joystick" class="touch-joystick">
+        <div class="joystick-base">
+          <div class="joystick-ring"></div>
+          <div id="joystick-nub" class="joystick-nub">
+            <span>🦛</span>
+          </div>
+        </div>
+        <div class="joystick-label">SLIDE TO MOVE</div>
+      </div>
+    </div>
+
+    <!-- Right Hold-to-Charge FART Button -->
+    <div class="control-zone right-zone">
+      <div id="btn-fart" class="fart-btn-container">
+        <!-- SVG Charge Ring -->
+        <svg class="charge-svg" viewBox="0 0 100 100">
+          <circle class="charge-bg" cx="50" cy="50" r="44"></circle>
+          <circle id="fart-charge-fill" class="charge-fill" cx="50" cy="50" r="44"></circle>
+        </svg>
+
+        <button class="fart-btn" aria-label="Fart Thrust">
+          <span class="fart-emoji">💨</span>
+          <span class="fart-text">HOLD TO CHARGE</span>
+          <span class="fart-sub">RELEASE TO BLAST!</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lobby Screen Modal -->
+  <div id="lobby-screen" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="game-header">
+        <div class="tube-icon">🍩💨</div>
+        <h1>WE FART TOGETHER</h1>
+        <p class="tagline">Server-Authoritative Co-op River Physics</p>
+      </div>
+
+      <!-- Player Name -->
+      <div class="input-group">
+        <label for="player-name-input">YOUR HIPPO NAME</label>
+        <input type="text" id="player-name-input" maxlength="14" placeholder="Enter name...">
+      </div>
+
+      <!-- Host Game Section -->
+      <div class="lobby-section">
+        <h3>CREATE A ROOM</h3>
+        <div class="player-count-picker">
+          <span class="label">PLAYERS:</span>
+          <button class="count-btn active" data-count="1">1 (Solo)</button>
+          <button class="count-btn" data-count="2">2</button>
+          <button class="count-btn" data-count="3">3</button>
+          <button class="count-btn" data-count="4">4</button>
+        </div>
+
+        <div class="input-group">
+          <label for="level-select">SELECT CANYON RAPIDS</label>
+          <select id="level-select">
+            <option value="1">Level 1: Canyon Rapids (Bypass Rock)</option>
+            <option value="2">Level 2: Windmill Alley & Rollers</option>
+            <option value="3">Level 3: The Slalom Rapids</option>
+          </select>
+        </div>
+
+        <button id="btn-create-room" class="btn-primary">
+          <span>👑</span> CREATE ROOM
+        </button>
+      </div>
+
+      <div class="divider"><span>OR JOIN WITH CODE</span></div>
+
+      <!-- Join Game Section -->
+      <div class="lobby-section join-section">
+        <div class="join-row">
+          <input type="text" id="join-code-input" maxlength="4" placeholder="CODE (e.g. HIPO)">
+          <button id="btn-join-room" class="btn-secondary">JOIN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Waiting Room Modal -->
+  <div id="waiting-screen" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h2>WAITING FOR PLAYERS</h2>
+      <div class="room-code-showcase">
+        <span class="code-label">ROOM CODE:</span>
+        <span id="waiting-code-display" class="code-val">----</span>
+      </div>
+
+      <p id="waiting-status">Waiting for hippos... 1 / 2 joined</p>
+
+      <div id="waiting-players-list" class="waiting-list"></div>
+
+      <button id="btn-copy-link" class="btn-copy">
+        <span>📋</span> COPY SHARE LINK
+      </button>
+
+      <p class="hint-text">Other players can open the link or type the 4-letter code on their phone!</p>
+    </div>
+  </div>
+
+  <!-- Paused Modal (Disconnect handling) -->
+  <div id="pause-overlay" class="modal-backdrop hidden">
+    <div class="modal-card pause-card">
+      <div class="pause-icon">⏸️</div>
+      <h2>GAME PAUSED</h2>
+      <p id="pause-reason">A player disconnected!</p>
+      <div class="reconnect-timer">Waiting up to 30 seconds for reconnect...</div>
+    </div>
+  </div>
+
+  <!-- Victory Modal -->
+  <div id="victory-modal" class="modal-backdrop hidden">
+    <div class="modal-card victory-card">
+      <div class="victory-header">
+        <div class="trophy-emoji">🏆🎉</div>
+        <h2>RIVER CONQUERED!</h2>
+        <p>All hippos survived the rapids!</p>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-item">
+          <span class="lbl">TIME</span>
+          <span id="final-time" class="val">00:00.00</span>
+        </div>
+        <div class="stat-item">
+          <span class="lbl">FARTS</span>
+          <span id="final-farts" class="val">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="lbl">POPS</span>
+          <span id="final-deaths" class="val">0</span>
+        </div>
+      </div>
+
+      <button id="btn-restart-game" class="btn-primary">
+        <span>🔄</span> NEXT LEVEL / RESTART
+      </button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/shared/levels.js"></script>
+  <script src="/js/audio.js"></script>
+  <script src="/js/renderer.js"></script>
+  <script src="/js/client.js"></script>
+</body>
+</html>

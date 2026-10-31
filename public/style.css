@@ -1,0 +1,588 @@
+/* ==========================================================================
+   We Fart Together — Mobile-First Co-op Raft Game Stylesheet
+   ========================================================================== */
+
+:root {
+  --bg-sand: #d7ccc8;
+  --water-blue: #29b6f6;
+  --fart-green: #76ff03;
+  --donut-orange: #ff7043;
+  --dark-brown: #4e342e;
+  --ui-bg: rgba(15, 23, 42, 0.88);
+  --ui-border: rgba(255, 255, 255, 0.2);
+  --safe-left: env(safe-area-inset-left, 16px);
+  --safe-right: env(safe-area-inset-right, 16px);
+  --safe-top: env(safe-area-inset-top, 8px);
+  --safe-bottom: env(safe-area-inset-bottom, 12px);
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Fredoka One", "Titan One", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  background-color: #1a1a2e;
+  font-family: var(--font-family);
+  color: #ffffff;
+}
+
+#game-canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+}
+
+/* ==========================================================================
+   Rotate Phone Portrait Overlay (Forces Landscape)
+   ========================================================================== */
+.rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0f172a;
+  color: #fff;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+
+@media (orientation: portrait) {
+  .rotate-overlay {
+    display: flex;
+  }
+}
+
+.rotate-box {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.rotate-phone-icon {
+  font-size: 3.5rem;
+  animation: rotateAnim 2s infinite ease-in-out;
+}
+
+@keyframes rotateAnim {
+  0%, 20% { transform: rotate(0deg); }
+  50%, 80% { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.rotate-box h2 {
+  color: #ffeb3b;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.rotate-box p {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   HUD Layer
+   ========================================================================== */
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hud-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 12px) 8px calc(var(--safe-left) + 12px);
+  gap: 8px;
+}
+
+.hud-card {
+  background: var(--ui-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  font-size: 0.85rem;
+  font-weight: 800;
+  pointer-events: auto;
+}
+
+.ping-card { color: #4ade80; }
+.timer-card { color: #facc15; font-size: 1rem; }
+
+.checkpoint-card, .room-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 8px;
+}
+
+.hud-sub {
+  font-size: 0.55rem;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.hud-btn {
+  background: var(--ui-bg);
+  border: 2px solid var(--ui-border);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 1.1rem;
+  padding: 5px 10px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.toast-banner {
+  align-self: center;
+  background: #facc15;
+  color: #1e293b;
+  font-weight: 900;
+  font-size: 1.1rem;
+  padding: 6px 18px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+/* ==========================================================================
+   Mobile Controls Layer
+   ========================================================================== */
+.controls-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 12px calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 12px) calc(var(--safe-left) + 16px);
+}
+
+.control-zone {
+  pointer-events: auto;
+}
+
+/* 1. Virtual Touch Joystick (Left Side) */
+.touch-joystick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.joystick-base {
+  width: 120px;
+  height: 120px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 3px solid rgba(56, 189, 248, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  position: relative;
+  touch-action: none;
+}
+
+.joystick-ring {
+  width: 70px;
+  height: 70px;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+.joystick-nub {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  border: 3px solid #e0f2fe;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #38bdf8;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* 2. Hold-to-Charge FART Button (Right Side) */
+.fart-btn-container {
+  width: 128px;
+  height: 128px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.charge-svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.charge-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 7;
+}
+
+.charge-fill {
+  fill: none;
+  stroke: var(--fart-green);
+  stroke-width: 8;
+  stroke-dasharray: 276;
+  stroke-dashoffset: 276;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.fart-btn {
+  width: 104px;
+  height: 104px;
+  background: linear-gradient(180deg, #66bb6a 0%, #2e7d32 100%);
+  border: 4px solid #a5d6a7;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #1b5e20, 0 10px 20px rgba(0,0,0,0.5);
+  transition: transform 0.05s, box-shadow 0.05s, filter 0.05s;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.fart-btn:active, .fart-btn-container.active .fart-btn {
+  transform: scale(0.92);
+  box-shadow: 0 2px 0 #1b5e20, 0 4px 10px rgba(0,0,0,0.5);
+  filter: brightness(1.25);
+  background: linear-gradient(180deg, #76ff03 0%, #43a047 100%);
+  border-color: #f1f8e9;
+}
+
+.fart-emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.fart-text {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.fart-sub {
+  font-size: 0.5rem;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   Modals (Lobby, Waiting, Pause, Victory)
+   ========================================================================= */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 15, 28, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  transition: opacity 0.2s ease;
+}
+
+.modal-backdrop.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 3px solid #38bdf8;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.7), 0 0 30px rgba(56, 189, 248, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  max-height: 94vh;
+  overflow-y: auto;
+}
+
+.game-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tube-icon { font-size: 2.4rem; }
+
+.game-header h1 {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #76ff03;
+  text-shadow: 0 3px 0 #2e7d32, 0 6px 12px rgba(118, 255, 3, 0.4);
+}
+
+.tagline {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.input-group label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1px;
+}
+
+input[type="text"], select {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  outline: none;
+}
+
+input[type="text"]:focus, select:focus {
+  border-color: #38bdf8;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lobby-section {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-section h3 {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #cbd5e1;
+  letter-spacing: 1px;
+  text-align: left;
+}
+
+.player-count-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-count-picker .label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+.count-btn {
+  flex: 1;
+  padding: 8px 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.count-btn.active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.btn-primary {
+  padding: 12px;
+  background: linear-gradient(180deg, #76ff03 0%, #43a047 100%);
+  border: 2px solid #ccff90;
+  border-radius: 14px;
+  color: #0f3811;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #2e7d32, 0 6px 12px rgba(118, 255, 3, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #2e7d32;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #64748b;
+  position: relative;
+}
+
+.join-row {
+  display: flex;
+  gap: 8px;
+}
+
+.join-row input {
+  flex: 2;
+  text-transform: uppercase;
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.btn-secondary {
+  flex: 1;
+  background: #0284c7;
+  border: 2px solid #38bdf8;
+  border-radius: 12px;
+  color: #fff;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+/* Waiting Room */
+.room-code-showcase {
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px dashed #facc15;
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.code-label { font-size: 0.7rem; color: #94a3b8; }
+.code-val { font-size: 2.2rem; font-weight: 900; color: #facc15; letter-spacing: 3px; }
+
+.waiting-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.waiting-slot {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+.waiting-slot.filled { border-color: #4ade80; color: #4ade80; }
+.waiting-slot.empty { color: #94a3b8; }
+
+.btn-copy {
+  padding: 10px;
+  background: rgba(56, 189, 248, 0.2);
+  border: 2px solid #38bdf8;
+  border-radius: 12px;
+  color: #fff;
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hint-text { font-size: 0.7rem; color: #94a3b8; }
+
+/* Pause / Victory */
+.pause-icon, .trophy-emoji { font-size: 3rem; }
+.pause-card h2 { color: #facc15; }
+.reconnect-timer { font-size: 0.8rem; color: #cbd5e1; margin-top: 6px; }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.stat-item {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-item .lbl { font-size: 0.65rem; color: #94a3b8; }
+.stat-item .val { font-size: 1.1rem; font-weight: 900; color: #facc15; }

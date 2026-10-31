@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS & Environment
+.DS_Store
+Thumbs.db
+.env
+
+# Reference Videos (69MB of screen recordings not needed for production deployment)
+*.mp4
+*.mov
+*.MP4
+*.MOV

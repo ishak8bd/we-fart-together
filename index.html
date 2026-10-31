@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>We Fart Together — 3D Co-op Water Physics Game</title>
+  <meta name="description" content="Hilarious 3D cooperative physics party game where capybaras steer a wild river donut raft using directional farts!">
+  <meta name="theme-color" content="#25c4f4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js (local fallback with CDN option) -->
+  <script src="lib/three.min.js"></script>
+</head>
+<body>
+  <!-- Canvas 3D Container -->
+  <div id="game-container">
+    <canvas id="webgl-canvas"></canvas>
+  </div>
+
+  <!-- HUD Overlay -->
+  <div id="hud" class="overlay-layer">
+    <!-- Top Bar: Timer, Checkpoint & Reset -->
+    <div class="top-bar">
+      <div class="hud-card timer-card">
+        <span class="hud-icon">⏱️</span>
+        <span id="timer-display">00:00.00</span>
+      </div>
+
+      <div class="hud-card checkpoint-card">
+        <span class="hud-label">CHECKPOINT</span>
+        <span id="checkpoint-display">1 / 5</span>
+      </div>
+
+      <div class="hud-actions">
+        <button id="btn-suicide" class="action-btn" title="Suicide & Respawn at Checkpoint (Hotkey: Y / R)">
+          <span class="btn-icon">💀</span>
+          <span class="btn-text">RESPAWN</span>
+        </button>
+        <button id="btn-sound" class="action-btn icon-only" title="Toggle Sound">
+          <span id="sound-icon">🔊</span>
+        </button>
+        <button id="btn-fullscreen" class="action-btn icon-only" title="Toggle Fullscreen">
+          <span>⛶</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Screen Alerts (Checkpoints, Death, Victory) -->
+    <div id="banner-alert" class="banner-alert hidden">
+      <div class="banner-inner">
+        <h1 id="banner-title">CHECK POINT</h1>
+        <p id="banner-subtitle">Respawn Point Saved!</p>
+      </div>
+    </div>
+
+    <!-- Floating Player Overhead Tags are projected from 3D to 2D in JS -->
+    <div id="nameplates-container"></div>
+
+    <!-- Mobile Touch Fart Controls -->
+    <div id="mobile-controls" class="mobile-controls">
+      <!-- 1 Player / AI Co-op Layout -->
+      <div id="controls-1p" class="controls-layout active">
+        <button id="btn-fart-p1-left" class="fart-touch-btn btn-steer-left" data-player="0">
+          <span class="btn-emoji">💨</span>
+          <span class="btn-label">STEER LEFT</span>
+          <span class="btn-subtext">(P1 Fart)</span>
+        </button>
+
+        <button id="btn-fart-all" class="fart-touch-btn btn-turbo" data-player="all">
+          <span class="btn-emoji">🚀💨</span>
+          <span class="btn-label">TURBO BLAST</span>
+          <span class="btn-subtext">(All Fart!)</span>
+        </button>
+
+        <button id="btn-fart-p1-right" class="fart-touch-btn btn-steer-right" data-player="1">
+          <span class="btn-emoji">💨</span>
+          <span class="btn-label">STEER RIGHT</span>
+          <span class="btn-subtext">(P2 Fart)</span>
+        </button>
+      </div>
+
+      <!-- 2 Players Co-op (Split Screen Touch) -->
+      <div id="controls-2p" class="controls-layout">
+        <button id="btn-fart-p1" class="fart-touch-btn btn-player1" data-player="0">
+          <span class="btn-emoji">🦫💨</span>
+          <span class="btn-label">P1 FART</span>
+          <span class="btn-subtext">Left Capybara</span>
+        </button>
+        <button id="btn-fart-p2" class="fart-touch-btn btn-player2" data-player="1">
+          <span class="btn-emoji">🦛💨</span>
+          <span class="btn-label">P2 FART</span>
+          <span class="btn-subtext">Right Hippo</span>
+        </button>
+      </div>
+
+      <!-- 4 Players Quad Co-op -->
+      <div id="controls-4p" class="controls-layout">
+        <button class="fart-touch-btn btn-quad p1" data-player="0">
+          <span>P1 🦫</span>
+        </button>
+        <button class="fart-touch-btn btn-quad p2" data-player="1">
+          <span>P2 🦛</span>
+        </button>
+        <button class="fart-touch-btn btn-quad p3" data-player="2">
+          <span>P3 🐻</span>
+        </button>
+        <button class="fart-touch-btn btn-quad p4" data-player="3">
+          <span>P4 🐊</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Menu / Instructions Modal -->
+  <div id="start-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="title-banner">
+        <span class="title-sub">WILD RIVER PHYSICS</span>
+        <h1 class="game-title">WE FART TOGETHER</h1>
+        <div class="title-badge">3D CO-OP MOBILE</div>
+      </div>
+
+      <div class="modal-body">
+        <div class="character-preview-row">
+          <div class="char-avatar capy">🦫</div>
+          <div class="char-tube">🍩</div>
+          <div class="char-avatar hippo">🦛</div>
+        </div>
+
+        <p class="game-description">
+          Cling to the donut raft and navigate raging canyon rapids! 
+          There is no rudder or paddle — <strong>your sole propulsion is directional farting!</strong>
+        </p>
+
+        <!-- Mode Select -->
+        <div class="mode-select-container">
+          <div class="section-title">CHOOSE CO-OP MODE:</div>
+          <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="1p">
+              <span class="tab-icon">👤🤖</span>
+              <span class="tab-title">Solo + AI</span>
+              <span class="tab-desc">Smart Capy Co-pilot</span>
+            </button>
+            <button class="mode-tab" data-mode="2p">
+              <span class="tab-icon">👥</span>
+              <span class="tab-title">2 Players</span>
+              <span class="tab-desc">Split-Touch Co-op</span>
+            </button>
+            <button class="mode-tab" data-mode="4p">
+              <span class="tab-icon">👨‍👩‍👧‍👦</span>
+              <span class="tab-title">4 Players</span>
+              <span class="tab-desc">Full Chaos Quad</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="controls-guide">
+          <div class="guide-item">
+            <span class="guide-key">📱 Touch</span>
+            <span class="guide-desc">Hold bottom buttons to fart & steer</span>
+          </div>
+          <div class="guide-item">
+            <span class="guide-key">⌨️ Desktop</span>
+            <span class="guide-desc">A / D or Space / Up Arrow</span>
+          </div>
+          <div class="guide-item">
+            <span class="guide-key">⚠️ Spikes</span>
+            <span class="guide-desc">Touch purple spiked walls = INSTANT POP!</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-start-game" class="btn-play">
+          <span class="play-icon">▶</span>
+          <span class="play-text">FART DOWN THE RIVER!</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Victory / Game Over Modal -->
+  <div id="victory-modal" class="modal-backdrop hidden">
+    <div class="modal-card victory-card">
+      <div class="victory-header">
+        <div class="trophy-icon">🏆🎉</div>
+        <h1>RIVER CONQUERED!</h1>
+        <p>You and your farting crew made it through the canyon alive!</p>
+      </div>
+
+      <div class="victory-stats">
+        <div class="stat-box">
+          <span class="stat-label">FINAL TIME</span>
+          <span id="final-time" class="stat-val">00:00.00</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">TOTAL FARTS</span>
+          <span id="final-farts" class="stat-val">0</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">EXPLOSIONS</span>
+          <span id="final-deaths" class="stat-val">0</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-replay" class="btn-play">
+          <span class="play-icon">🔄</span>
+          <span class="play-text">PLAY AGAIN</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Scripts -->
+  <script src="js/audio.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/track.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

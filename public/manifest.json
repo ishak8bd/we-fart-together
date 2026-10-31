@@ -1,0 +1,10 @@
+{
+  "name": "We Fart Together",
+  "short_name": "FartTogether",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1a1a2e",
+  "theme_color": "#29b6f6",
+  "description": "Multiplayer cooperative river raft game powered by directional farts!"
+}
