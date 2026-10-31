@@ -31,7 +31,7 @@ A mobile-first, cooperative 3D-inspired 2D physics river-runner game. Up to 4 pl
 ## ☁️ Deployment on Render.com
 
 1. On [Render.com](https://render.com), click **New +** and select **Web Service**.
-2. Connect this repository: `https://github.com/isaaxk/we-fart-together`.
+2. Connect this repository: `https://github.com/ishak8bd/we-fart-together`.
 3. Configure settings:
    - **Environment**: `Node`
    - **Build Command**: `npm install`
