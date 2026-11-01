@@ -114,6 +114,39 @@ html, body {
   justify-content: space-between;
 }
 
+/* Slanted Top-Center Timer Tab (from reference screenshots) */
+.hud-timer-tab {
+  position: absolute;
+  top: calc(var(--safe-top) + 8px);
+  left: 50%;
+  transform: translateX(-50%) skewX(-14deg);
+  background: rgba(43, 73, 107, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  padding: 4px 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.hud-timer-tab .timer-icon {
+  font-size: 1.15rem;
+  transform: skewX(14deg);
+}
+
+.hud-timer-tab span#hud-timer {
+  font-family: monospace, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1px;
+  transform: skewX(14deg);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
 .hud-top-bar {
   display: flex;
   align-items: center;
@@ -193,6 +226,39 @@ html, body {
 
 .control-zone {
   pointer-events: auto;
+}
+
+/* 0. Suicide Button (Pill button from screenshot 5) */
+.suicide-pill-btn {
+  background: rgba(15, 23, 42, 0.78);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+  margin-bottom: 8px;
+  transition: transform 0.05s, background 0.15s, border-color 0.15s;
+}
+
+.suicide-pill-btn:active {
+  transform: scale(0.92);
+  background: rgba(220, 38, 38, 0.85);
+  border-color: #ef4444;
+}
+
+.suicide-icon {
+  font-size: 0.85rem;
 }
 
 /* 1. Virtual Touch Joystick (Left Side) */
@@ -599,19 +665,20 @@ input[type="text"]:focus, select:focus {
 .nameplate {
   position: absolute;
   transform: translate(-50%, -100%);
-  background: rgba(0, 0, 0, 0.75);
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
-  border-radius: 8px;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  font-weight: 800;
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #ffffff;
   letter-spacing: 0.5px;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  text-shadow:
+    -1.5px -1.5px 0 #000,
+     1.5px -1.5px 0 #000,
+    -1.5px  1.5px 0 #000,
+     1.5px  1.5px 0 #000,
+     0px    2px 4px rgba(0,0,0,0.85);
   display: flex;
   align-items: center;
-  gap: 4px;
 }
 
 .nameplate.p1 { color: #ffb74d; border-color: #ffb74d; }

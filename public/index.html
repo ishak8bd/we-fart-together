@@ -30,20 +30,16 @@
 
   <!-- HUD Overlay -->
   <div id="hud" class="hud-layer hidden">
+    <!-- Slanted Top-Center Timer Tab (from reference screenshots) -->
+    <div class="hud-timer-tab">
+      <span class="timer-icon">⏱</span>
+      <span id="hud-timer">00:00.00</span>
+    </div>
+
     <div class="hud-top-bar">
       <div class="hud-card ping-card">
         <span>⚡</span>
         <span id="hud-ping">--ms</span>
-      </div>
-
-      <div class="hud-card timer-card">
-        <span>⏱️</span>
-        <span id="hud-timer">00:00.00</span>
-      </div>
-
-      <div class="hud-card checkpoint-card">
-        <span class="hud-sub">CHECKPOINT</span>
-        <span id="hud-checkpoint">1 / 4</span>
       </div>
 
       <div class="hud-card room-badge">
@@ -58,7 +54,7 @@
       </div>
     </div>
 
-    <!-- Floating 2D/3D Overhead Nameplates -->
+    <!-- Floating Overhead Nameplates with Dark Outline -->
     <div id="nameplates-container"></div>
 
     <!-- Center Toast Alert -->
@@ -67,8 +63,13 @@
 
   <!-- Mobile Touch Controls -->
   <div id="controls-layer" class="controls-layer hidden">
-    <!-- Left Virtual Touch Joystick -->
+    <!-- Left Zone: Touch Joystick & Suicide Button -->
     <div class="control-zone left-zone">
+      <!-- Dark Pill SUICIDE Button (from reference screenshot 5) -->
+      <button id="btn-suicide" class="suicide-pill-btn" title="Explode & Respawn at Checkpoint">
+        <span class="suicide-icon">🛈</span> SUICIDE
+      </button>
+
       <div id="touch-joystick" class="touch-joystick">
         <div class="joystick-base">
           <div class="joystick-ring"></div>
@@ -80,71 +81,68 @@
       </div>
     </div>
 
-    <!-- Right Hold-to-Charge FART Button -->
+    <!-- Right Zone: Big FART Button (Simple Hold to Thrust) -->
     <div class="control-zone right-zone">
       <div id="btn-fart" class="fart-btn-container">
-        <!-- SVG Charge Ring -->
-        <svg class="charge-svg" viewBox="0 0 100 100">
-          <circle class="charge-bg" cx="50" cy="50" r="44"></circle>
-          <circle id="fart-charge-fill" class="charge-fill" cx="50" cy="50" r="44"></circle>
-        </svg>
-
         <button class="fart-btn" aria-label="Fart Thrust">
           <span class="fart-emoji">💨</span>
-          <span class="fart-text">HOLD TO CHARGE</span>
-          <span class="fart-sub">RELEASE TO BLAST!</span>
+          <span class="fart-text">FART</span>
+          <span class="fart-sub">HOLD TO THRUST</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Lobby Screen Modal -->
+  <!-- Main Menu / Lobby Modal -->
   <div id="lobby-screen" class="modal-backdrop">
     <div class="modal-card">
-      <div class="game-header">
-        <div class="tube-icon">🍩💨</div>
-        <h1>WE FART TOGETHER</h1>
-        <p class="tagline">Server-Authoritative Co-op River Physics</p>
+      <div class="modal-header">
+        <h1>💨 WE FART TOGETHER</h1>
+        <p class="subtitle">Steer the donut raft by directional farting with your friends!</p>
       </div>
 
-      <!-- Player Name -->
       <div class="input-group">
         <label for="player-name-input">YOUR HIPPO NAME</label>
-        <input type="text" id="player-name-input" maxlength="14" placeholder="Enter name...">
+        <input type="text" id="player-name-input" maxlength="12" placeholder="e.g. FartingMaster" autocomplete="off">
       </div>
 
-      <!-- Host Game Section -->
-      <div class="lobby-section">
-        <h3>CREATE A ROOM</h3>
-        <div class="player-count-picker">
-          <span class="label">PLAYERS:</span>
-          <button class="count-btn active" data-count="1">1 (Solo)</button>
-          <button class="count-btn" data-count="2">2</button>
-          <button class="count-btn" data-count="3">3</button>
-          <button class="count-btn" data-count="4">4</button>
+      <div class="lobby-columns">
+        <!-- Host Column -->
+        <div class="column-box">
+          <h3>👑 HOST A ROOM</h3>
+          <p class="desc">Pick player count and invite friends:</p>
+
+          <div class="count-selector">
+            <button class="count-btn active" data-count="1">1 Solo</button>
+            <button class="count-btn" data-count="2">2 Co-op</button>
+            <button class="count-btn" data-count="3">3 Trio</button>
+            <button class="count-btn" data-count="4">4 Squad</button>
+          </div>
+
+          <div class="level-select-group">
+            <label for="level-select">SELECT RAPIDS:</label>
+            <select id="level-select">
+              <option value="1">Level 1 — Canyon Rapids</option>
+              <option value="2">Level 2 — Windmill Alley</option>
+              <option value="3">Level 3 — The Slalom Rapids</option>
+            </select>
+          </div>
+
+          <button id="btn-create-room" class="btn-primary">
+            <span>🚀</span> CREATE ROOM
+          </button>
         </div>
 
-        <div class="input-group">
-          <label for="level-select">SELECT CANYON RAPIDS</label>
-          <select id="level-select">
-            <option value="1">Level 1: Canyon Rapids (Bypass Rock)</option>
-            <option value="2">Level 2: Windmill Alley & Rollers</option>
-            <option value="3">Level 3: The Slalom Rapids</option>
-          </select>
-        </div>
+        <!-- Join Column -->
+        <div class="column-box">
+          <h3>🚪 JOIN WITH CODE</h3>
+          <p class="desc">Enter 4-character room code:</p>
 
-        <button id="btn-create-room" class="btn-primary">
-          <span>👑</span> CREATE ROOM
-        </button>
-      </div>
+          <input type="text" id="join-code-input" class="code-input" maxlength="4" placeholder="XXXX" autocomplete="off">
 
-      <div class="divider"><span>OR JOIN WITH CODE</span></div>
-
-      <!-- Join Game Section -->
-      <div class="lobby-section join-section">
-        <div class="join-row">
-          <input type="text" id="join-code-input" maxlength="4" placeholder="CODE (e.g. HIPO)">
-          <button id="btn-join-room" class="btn-secondary">JOIN</button>
+          <button id="btn-join-room" class="btn-secondary">
+            <span>🤝</span> JOIN ROOM
+          </button>
         </div>
       </div>
     </div>
@@ -152,42 +150,39 @@
 
   <!-- Waiting Room Modal -->
   <div id="waiting-screen" class="modal-backdrop hidden">
-    <div class="modal-card">
-      <h2>WAITING FOR PLAYERS</h2>
-      <div class="room-code-showcase">
-        <span class="code-label">ROOM CODE:</span>
-        <span id="waiting-code-display" class="code-val">----</span>
-      </div>
-
-      <p id="waiting-status">Waiting for hippos... 1 / 2 joined</p>
+    <div class="modal-card waiting-card">
+      <h2>ROOM CODE: <span id="waiting-code-display" class="highlight-code">----</span></h2>
+      <p id="waiting-status" class="status-msg">Waiting for other hippos to join...</p>
 
       <div id="waiting-players-list" class="waiting-list"></div>
 
-      <button id="btn-copy-link" class="btn-copy">
-        <span>📋</span> COPY SHARE LINK
-      </button>
-
-      <p class="hint-text">Other players can open the link or type the 4-letter code on their phone!</p>
+      <div class="waiting-actions">
+        <button id="btn-copy-link" class="btn-secondary">
+          <span>📋</span> COPY SHARE LINK
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Paused Modal (Disconnect handling) -->
+  <!-- Reconnect / Pause Overlay -->
   <div id="pause-overlay" class="modal-backdrop hidden">
     <div class="modal-card pause-card">
-      <div class="pause-icon">⏸️</div>
-      <h2>GAME PAUSED</h2>
-      <p id="pause-reason">A player disconnected!</p>
-      <div class="reconnect-timer">Waiting up to 30 seconds for reconnect...</div>
+      <h2>⏸️ GAME PAUSED</h2>
+      <p id="pause-reason">A player lost connection!</p>
+      <div class="reconnect-countdown">
+        <span>Waiting for reconnect: </span>
+        <strong id="pause-timer">30</strong>s
+      </div>
     </div>
   </div>
 
   <!-- Victory Modal -->
   <div id="victory-modal" class="modal-backdrop hidden">
     <div class="modal-card victory-card">
-      <div class="victory-header">
-        <div class="trophy-emoji">🏆🎉</div>
-        <h2>RIVER CONQUERED!</h2>
-        <p>All hippos survived the rapids!</p>
+      <div class="confetti-icon">🏆 🏁 🦛</div>
+      <h2>FINISH LINE REACHED!</h2>
+      <div class="finish-flavor">
+        <p>All hippos survived the canyon rapids!</p>
       </div>
 
       <div class="stats-row">

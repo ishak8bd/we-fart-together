@@ -1,8 +1,14 @@
 /**
  * We Fart Together — 3D WebGL Three.js Renderer
- * Recreates the exact visual experience from the gameplay video clips:
- * 3D chase camera, inflatable donut raft, animated capybaras/hippos,
- * neon green fart plumes, water wake rings, spiked hazards, and canyon canyon walls.
+ * Visuals matching the reference game:
+ * - 3D third-person chase camera (high angle, FOV 60, pitch ~35-45 degrees)
+ * - Inflatable donut raft: cream/peach tube, gold loops, teal skirt, green plank deck
+ * - Characters: 4 chunky animals (blue hippo, orange hippo, green dino, dark bear) with red boxing-glove paws
+ * - Saturated bright blue water with white ripple rings under raft
+ * - Banks: rounded grass-green pipe rails with orange base trim
+ * - Red-orange canyon cliffs, bamboo stalks, round trees, lily pads with pink lotus flowers in start pool
+ * - START & FINISH bamboo arches with palm thatch
+ * - Pink/magenta spiked bank rollers, grey spiked slab gates, rotating spiked bars, grey rocks
  */
 
 class Renderer3D {
@@ -22,16 +28,15 @@ class Renderer3D {
   }
 
   initThree() {
-    // 1. Three.js Scene with Sky Gradient Fog
+    // 1. Scene with Vibrant Blue Sky & Subtle Distance Fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x81d4fa);
-    // Adjusted fog for pixel-scale world (0.0004 allows seeing ~2000px down river with gentle haze)
-    this.scene.fog = new THREE.FogExp2(0xb3e5fc, 0.0004);
+    this.scene.background = new THREE.Color(0x80d8ff);
+    this.scene.fog = new THREE.FogExp2(0x80d8ff, 0.00035);
 
-    // 2. Perspective Camera (3rd Person Chase Camera)
+    // 2. Third-person Chase Camera (FOV 60, high angle looking down track)
     const aspect = window.innerWidth / window.innerHeight;
-    this.camera = new THREE.PerspectiveCamera(54, aspect, 1, 4500);
-    this.camera.position.set(300, 130, 0);
+    this.camera = new THREE.PerspectiveCamera(60, aspect, 1, 4500);
+    this.camera.position.set(300, 115, 60);
 
     // 3. WebGLRenderer (Capped at 2x DPR for 60fps on mobile)
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -46,20 +51,20 @@ class Renderer3D {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // 4. Vibrant Cartoon Lighting
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x81d4fa, 0.8);
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x80d8ff, 0.85);
     this.scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xfff9c4, 1.25);
-    dirLight.position.set(200, 450, -200);
+    const dirLight = new THREE.DirectionalLight(0xfff9c4, 1.3);
+    dirLight.position.set(200, 480, -200);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
     dirLight.shadow.camera.near = 50;
-    dirLight.shadow.camera.far = 1500;
-    dirLight.shadow.camera.left = -320;
-    dirLight.shadow.camera.right = 320;
-    dirLight.shadow.camera.top = 320;
-    dirLight.shadow.camera.bottom = -320;
+    dirLight.shadow.camera.far = 1600;
+    dirLight.shadow.camera.left = -340;
+    dirLight.shadow.camera.right = 340;
+    dirLight.shadow.camera.top = 340;
+    dirLight.shadow.camera.bottom = -340;
     this.scene.add(dirLight);
     this.sunLight = dirLight;
 
@@ -79,40 +84,24 @@ class Renderer3D {
   }
 
   initRaft() {
-    // 3D Inflatable Donut Raft
+    // 3D Inflatable Donut Raft Group
     this.raftGroup = new THREE.Group();
     this.scene.add(this.raftGroup);
 
-    // SCALE FACTOR: ModelFactory torus has major radius 1.5.
-    // Physics RAFT_RADIUS is 55px.
-    // Scaling raftGroup by 55 / 1.5 = ~36.67 scales raft and child characters to exact physics bounds!
-    this.RAFT_SCALE = 55 / 1.5;
-    this.raftGroup.scale.setScalar(this.RAFT_SCALE);
-
-    // Raft Model (Torus r=1.5, tube=0.45)
+    // Raft Model (Built directly at diameter 80px, radius 40px)
     this.raftMesh = ModelFactory.createRaft();
     this.raftGroup.add(this.raftMesh);
 
-    // Animal Characters on rim
-    // 0: Brown Capybara, 1: Teal Hippo, 2: Dark Bear/Capy, 3: Green Croc/Hippo
-    const charDefs = [
-      { type: 'capy', color: 0x8d6e63 },
-      { type: 'hippo', color: 0x455a64 },
-      { type: 'capy', color: 0xd97706 },
-      { type: 'hippo', color: 0x7c3aed }
-    ];
-
+    // 4 Animal Characters on rim with red boxing-glove paws:
+    // Slot 0: Blue Hippo, Slot 1: Orange Hippo, Slot 2: Green Dino, Slot 3: Dark Bear
     this.characterMeshes = [];
-    charDefs.forEach((def) => {
-      const char = def.type === 'capy'
-        ? ModelFactory.createCapybara(def.color)
-        : ModelFactory.createHippo(def.color);
-
+    for (let i = 0; i < 4; i++) {
+      const char = ModelFactory.createCharacter(i);
       char.position.set(0, 0, 0);
       char.visible = false;
       this.raftGroup.add(char);
       this.characterMeshes.push(char);
-    });
+    }
   }
 
   /**
@@ -122,42 +111,31 @@ class Renderer3D {
     if (this.currentLevelId === level.id) return;
     this.currentLevelId = level.id;
 
-    // Clear previous level meshes
+    // Clear previous meshes
     this.levelMeshes.forEach(m => this.scene.remove(m));
     this.levelMeshes = [];
     this.dynamicMeshMap.clear();
 
-    // 1. Build Water Surface Mesh from waypoints
-    const pts = level.waypoints;
+    const { leftPts, rightPts } = computeBoundaryPolylines(level.waypoints);
+
+    // 1. Saturated Bright Blue Water Surface Mesh
     const waterGeo = new THREE.BufferGeometry();
     const positions = [];
     const uvs = [];
     const indices = [];
 
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      const pNext = pts[Math.min(i + 1, pts.length - 1)];
-      const pPrev = pts[Math.max(i - 1, 0)];
-      const dx = pNext.x - pPrev.x;
-      const dz = pNext.y - pPrev.y; // 2D Y is 3D Z
-      const len = Math.hypot(dx, dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-
-      const halfW = p.width / 2;
-      const leftX = p.x + nx * halfW;
-      const leftZ = p.y + nz * halfW;
-      const rightX = p.x - nx * halfW;
-      const rightZ = p.y - nz * halfW;
-
+    for (let i = 0; i < leftPts.length; i++) {
+      const lp = leftPts[i];
+      const rp = rightPts[i];
       const waterY = 0;
-      positions.push(leftX, waterY, leftZ);
-      positions.push(rightX, waterY, rightZ);
 
-      uvs.push(0, (i / pts.length) * 20);
-      uvs.push(1, (i / pts.length) * 20);
+      positions.push(lp.x, waterY, lp.y);
+      positions.push(rp.x, waterY, rp.y);
 
-      if (i < pts.length - 1) {
+      uvs.push(0, (i / leftPts.length) * 24);
+      uvs.push(1, (i / leftPts.length) * 24);
+
+      if (i < leftPts.length - 1) {
         const base = i * 2;
         indices.push(base, base + 1, base + 2);
         indices.push(base + 1, base + 3, base + 2);
@@ -170,11 +148,11 @@ class Renderer3D {
     waterGeo.computeVertexNormals();
 
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x29b6f6,
-      roughness: 0.12,
-      metalness: 0.1,
+      color: 0x0288d1, // Saturated vibrant blue water
+      roughness: 0.1,
+      metalness: 0.08,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.92
     });
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
     waterMesh.receiveShadow = true;
@@ -182,82 +160,109 @@ class Renderer3D {
     this.levelMeshes.push(waterMesh);
     this.waterMesh = waterMesh;
 
-    // 2. Build Border Rails (Bamboo/Green trim along sides)
-    for (let side of [-1, 1]) {
-      const railCurvePts = [];
-      for (let i = 0; i < pts.length; i++) {
-        const p = pts[i];
-        const pNext = pts[Math.min(i + 1, pts.length - 1)];
-        const pPrev = pts[Math.max(i - 1, 0)];
-        const dx = pNext.x - pPrev.x;
-        const dz = pNext.y - pPrev.y;
-        const len = Math.hypot(dx, dz) || 1;
-        const nx = -dz / len;
-        const nz = dx / len;
-        const halfW = p.width / 2;
-        railCurvePts.push(new THREE.Vector3(
-          p.x + side * nx * (halfW + 5),
-          6,
-          p.y + side * nz * (halfW + 5)
-        ));
+    // 2. Banks: Grass-Green Pipe Rails on top with Orange Base Trim along water line (from screenshots)
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.6 }); // Grass-green top rail
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0xfb8c00, roughness: 0.65 }); // Orange base trim
+
+    for (let side = 0; side < 2; side++) {
+      const bPts = side === 0 ? leftPts : rightPts;
+      const topPts = [];
+      const bottomPts = [];
+
+      for (let i = 0; i < bPts.length; i++) {
+        const p = bPts[i];
+        topPts.push(new THREE.Vector3(p.x, 8, p.y));
+        bottomPts.push(new THREE.Vector3(p.x, 2, p.y));
       }
-      const railCurve = new THREE.CatmullRomCurve3(railCurvePts);
-      const tubeGeo = new THREE.TubeGeometry(railCurve, 90, 7, 8, false);
-      const railMat = new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.7 });
-      const railMesh = new THREE.Mesh(tubeGeo, railMat);
-      railMesh.receiveShadow = true;
-      this.scene.add(railMesh);
-      this.levelMeshes.push(railMesh);
+
+      // Top green rail
+      const topCurve = new THREE.CatmullRomCurve3(topPts);
+      const topGeo = new THREE.TubeGeometry(topCurve, 100, 6, 8, false);
+      const topMesh = new THREE.Mesh(topGeo, railMat);
+      topMesh.receiveShadow = true;
+      this.scene.add(topMesh);
+      this.levelMeshes.push(topMesh);
+
+      // Orange base trim
+      const bottomCurve = new THREE.CatmullRomCurve3(bottomPts);
+      const bottomGeo = new THREE.TubeGeometry(bottomCurve, 100, 4, 8, false);
+      const bottomMesh = new THREE.Mesh(bottomGeo, trimMat);
+      bottomMesh.receiveShadow = true;
+      this.scene.add(bottomMesh);
+      this.levelMeshes.push(bottomMesh);
     }
 
-    // 3. Canyon Mesas / Sandstone Cliffs along river
-    const canyonMat = new THREE.MeshStandardMaterial({ color: 0xd7ccc8, roughness: 0.95, flatShading: true });
-    for (let i = 0; i < pts.length; i += 2) {
-      const p = pts[i];
+    // 3. Red-Orange Canyon Sandstone Cliffs (from screenshots)
+    const canyonMat = new THREE.MeshStandardMaterial({ color: 0xe64a19, roughness: 0.95, flatShading: true });
+    for (let i = 0; i < level.waypoints.length; i += 2) {
+      const p = level.waypoints[i];
       for (let side of [-1, 1]) {
         const mesa = new THREE.Mesh(
-          new THREE.CylinderGeometry(70 + Math.random() * 30, 95 + Math.random() * 30, 120, 7),
+          new THREE.CylinderGeometry(75 + Math.random() * 25, 100 + Math.random() * 30, 130, 7),
           canyonMat
         );
         mesa.position.set(
           p.x + side * (p.width / 2 + 130 + Math.random() * 40),
-          55,
-          p.y + (Math.random() - 0.5) * 60
+          58,
+          p.y + (Math.random() - 0.5) * 50
         );
         this.scene.add(mesa);
         this.levelMeshes.push(mesa);
       }
     }
 
-    // 4. Checkpoint Wooden Archways (scaled to span canal width)
-    level.checkpoints.forEach((cp) => {
-      const arch = ModelFactory.createCheckpointArch(cp.label);
-      arch.position.set(cp.x, 0, cp.y);
-      // Base arch width between posts is 13 units
-      const scaleXZ = cp.width / 13;
-      const scaleY = 9.0;
-      arch.scale.set(scaleXZ, scaleY, scaleXZ);
-      this.scene.add(arch);
-      this.levelMeshes.push(arch);
-    });
+    // 4. Lily Pads with Pink Flowers in Start Pool (from screenshots)
+    const startWp = level.waypoints[0];
+    for (let l = 0; l < 8; l++) {
+      const lily = ModelFactory.createLilyPad();
+      const angle = (l / 8) * Math.PI * 2;
+      const dist = 90 + Math.random() * 80;
+      lily.position.set(
+        startWp.x + Math.cos(angle) * dist,
+        0,
+        startWp.y + 60 + Math.sin(angle) * 70
+      );
+      this.scene.add(lily);
+      this.levelMeshes.push(lily);
+    }
 
-    // 5. Obstacles (Shrunk Rocks, Spikes, Windmills, Rollers, Boosters)
+    // 5. START & FINISH Bamboo Gate Arches (from screenshots)
+    // Start Gate at Checkpoint 0
+    const startCp = level.checkpoints[0];
+    const startArch = ModelFactory.createGateArch(startCp.width, "START");
+    startArch.position.set(startCp.x, 0, startCp.y);
+    this.scene.add(startArch);
+    this.levelMeshes.push(startArch);
+
+    // Finish Gate at Last Checkpoint
+    const finishCp = level.checkpoints[level.checkpoints.length - 1];
+    const finishArch = ModelFactory.createGateArch(finishCp.width, "FINISH");
+    finishArch.position.set(finishCp.x, 0, finishCp.y);
+    this.scene.add(finishArch);
+    this.levelMeshes.push(finishArch);
+
+    // 6. Obstacles (Pink Bank Rollers, Grey Slabs, Windmills, Rocks, Boosters)
     level.obstacles.forEach(obs => {
       if (obs.type === 'rock') {
         const rock = ModelFactory.createBoulder(obs.radius);
-        rock.position.set(obs.x, obs.radius * 0.7, obs.y);
+        rock.position.set(obs.x, 0, obs.y);
         this.scene.add(rock);
         this.levelMeshes.push(rock);
-      } else if (obs.type === 'spike_strip') {
-        const strip = ModelFactory.createSpikeStrip(obs.height, obs.width || 20);
+      } else if (obs.type === 'spike_roller' || obs.type === 'spike_strip') {
+        const strip = ModelFactory.createSpikeRoller(obs.height, obs.width || 24);
         strip.position.set(obs.x, 8, obs.y);
         strip.rotation.y = -(obs.angle || 0) + Math.PI / 2;
         this.scene.add(strip);
         this.levelMeshes.push(strip);
+      } else if (obs.type === 'spike_slab') {
+        const slab = ModelFactory.createSpikeSlab(obs.width, obs.height);
+        slab.position.set(obs.x, 0, obs.y);
+        slab.rotation.y = -(obs.angle || 0);
+        this.scene.add(slab);
+        this.levelMeshes.push(slab);
       } else if (obs.type === 'boost') {
         const boost = ModelFactory.createSpeedChevron();
-        boost.position.set(obs.x, 1, obs.y);
-        boost.scale.set(22, 22, 22);
+        boost.position.set(obs.x, 0, obs.y);
         this.scene.add(boost);
         this.levelMeshes.push(boost);
       } else if (obs.type === 'windmill') {
@@ -277,59 +282,67 @@ class Renderer3D {
   }
 
   /**
-   * Main 3D Render Step
+   * Main 3D Render Loop Step
    */
   render(level, raftState, hippos, dynamicObstacles, activeCheckpoint, dt) {
     if (!raftState) return;
 
     this.time += dt;
 
-    // Load Level if needed
     if (level) {
       this.loadLevel(level);
     }
 
-    // 1. Position & Rotate the Raft (World 2D X -> 3D X, 2D Y -> 3D Z)
-    const bob = Math.sin(this.time * 4) * 1.5;
+    // 1. Position & Rotate the Raft
+    const bob = Math.sin(this.time * 3) * 1.0;
     this.raftGroup.position.set(raftState.x, bob, raftState.y);
     this.raftGroup.rotation.y = raftState.angle;
 
-    // Subtle Raft Bobbing and Tilt (safe with vRot default)
-    const vRot = raftState.vRot || 0;
-    this.raftGroup.rotation.z = -vRot * 0.35;
-    this.raftGroup.rotation.x = Math.sin(this.time * 3) * 0.03;
+    // Visibility when alive / dead (exploding)
+    this.raftMesh.visible = !raftState.isDead;
 
-    // 2. Position Hippos along the Raft Rim (in local raft space)
+    // 2. Position Hippos on Raft Rim (Radius 32)
     if (hippos) {
       this.characterMeshes.forEach((mesh, idx) => {
         const h = hippos[idx];
         if (h && h.connected) {
           mesh.visible = true;
 
-          // Local coordinate: Torus major radius is 1.5
-          const rimRadius = 1.45;
-          const charAngle = h.angle;
-          mesh.position.set(
-            Math.cos(charAngle) * rimRadius,
-            0.2,
-            Math.sin(charAngle) * rimRadius
-          );
+          if (raftState.isDead) {
+            // Drowning animation: tip backward into water and sink
+            mesh.position.y -= dt * 20;
+            mesh.rotation.x += dt * 3;
+            if (Math.random() < 0.2) {
+              const worldPos = new THREE.Vector3();
+              mesh.getWorldPosition(worldPos);
+              this.particles.emitDrowningBubbles(worldPos);
+            }
+          } else {
+            // Standing on rim
+            const rimRadius = 32;
+            const charAngle = h.angle;
+            mesh.position.set(
+              Math.cos(charAngle) * rimRadius,
+              2.5,
+              Math.sin(charAngle) * rimRadius
+            );
 
-          // ORIENTATION:
-          // Local +Z (butt) points outward toward the water!
-          // Local -Z (head) points inward toward the raft center!
-          mesh.rotation.y = Math.PI / 2 - charAngle;
+            // ORIENTATION:
+            // Butt faces outward toward water!
+            // Head faces inward toward raft center!
+            mesh.rotation.y = Math.PI / 2 - charAngle;
+            mesh.rotation.x = 0;
 
-          // Animate Butt Swelling / Recoil on Fart
-          if (mesh.buttMesh) {
-            if (h.isFarting) {
-              const jiggle = 1.0 + Math.sin(this.time * 45) * 0.28;
-              const chargeScale = 1.0 + (h.fartCharge || 0) * 0.5;
-              mesh.buttMesh.scale.set(jiggle * chargeScale * 1.3, jiggle * 1.2, jiggle * chargeScale * 1.4);
-              mesh.rotation.z = Math.sin(this.time * 60) * 0.15; // Wobble recoil
-            } else {
-              mesh.buttMesh.scale.lerp(new THREE.Vector3(1, 1, 1), dt * 10);
-              mesh.rotation.z = 0;
+            // Butt Swelling & Wobble during Fart
+            if (mesh.buttMesh) {
+              if (h.isFarting) {
+                const jiggle = 1.0 + Math.sin(this.time * 45) * 0.25;
+                mesh.buttMesh.scale.set(jiggle * 1.35, jiggle * 1.25, jiggle * 1.4);
+                mesh.rotation.z = Math.sin(this.time * 50) * 0.12;
+              } else {
+                mesh.buttMesh.scale.lerp(new THREE.Vector3(1, 1, 1), dt * 10);
+                mesh.rotation.z = 0;
+              }
             }
           }
         } else {
@@ -338,7 +351,7 @@ class Renderer3D {
       });
     }
 
-    // 3. Update Dynamic Obstacles (Windmills, Rollers)
+    // 3. Update Dynamic Obstacles
     if (dynamicObstacles) {
       dynamicObstacles.forEach(d => {
         const entry = this.dynamicMeshMap.get(d.id);
@@ -352,24 +365,24 @@ class Renderer3D {
       });
     }
 
-    // 4. Update 3D Particles (Neon-Green Farts & Explosions)
+    // 4. Update Particles
     this.particles.update(dt);
 
-    // Periodic Water Wake Ring
+    // Ripple Wake Rings beneath moving raft
     const speed = Math.hypot(raftState.vx || 0, raftState.vy || 0);
-    if (speed > 0.8 && Math.random() < 0.25) {
-      this.particles.emitWake(this.raftGroup.position, 52);
+    if (!raftState.isDead && speed > 5.0 && Math.random() < 0.25) {
+      this.particles.emitWake(this.raftGroup.position, 40);
     }
 
-    // 5. 3rd-Person Dynamic Chase Camera behind the Raft
+    // 5. High-Angle Third-Person Chase Camera (FOV 60, pitch ~35-45 deg)
     this.updateCamera(dt, raftState);
 
-    // 6. Update Sunlight tracking
-    this.sunLight.position.set(raftState.x + 180, 420, raftState.y - 160);
+    // 6. Sunlight Tracking
+    this.sunLight.position.set(raftState.x + 180, 480, raftState.y - 180);
     this.sunLight.target.position.set(raftState.x, 0, raftState.y);
     this.sunLight.target.updateMatrixWorld();
 
-    // 7. Update 2D Floating Nameplates projected from 3D heads
+    // 7. Floating Nameplates with Outline
     this.updateNameplates(hippos);
 
     // Render 3D Scene
@@ -377,28 +390,26 @@ class Renderer3D {
   }
 
   updateCamera(dt, raft) {
-    // Current heading in 2D angle
-    const currentHeading = raft.angle;
-    const forwardX = Math.cos(currentHeading);
-    const forwardZ = Math.sin(currentHeading);
+    const heading = raft.angle;
+    const forwardX = Math.cos(heading);
+    const forwardZ = Math.sin(heading);
 
-    // Camera behind and above the raft
-    const distBehind = 160;
-    const camHeight = 110;
+    // High angle behind raft: ~130px behind, ~95px above (pitch ~36 degrees)
+    const distBehind = 135;
+    const camHeight = 98;
     const idealX = raft.x - forwardX * distBehind;
     const idealZ = raft.y - forwardZ * distBehind;
     const idealY = camHeight;
 
-    // Smooth lerp
     this.camera.position.x += (idealX - this.camera.position.x) * (dt * 5.5);
     this.camera.position.z += (idealZ - this.camera.position.z) * (dt * 5.5);
     this.camera.position.y += (idealY - this.camera.position.y) * (dt * 5.5);
 
-    // Look slightly ahead of raft
+    // Look slightly ahead of raft down the canal
     const lookTarget = new THREE.Vector3(
-      raft.x + forwardX * 45,
-      12,
-      raft.y + forwardZ * 45
+      raft.x + forwardX * 40,
+      10,
+      raft.y + forwardZ * 40
     );
     this.camera.lookAt(lookTarget);
   }
@@ -424,13 +435,14 @@ class Renderer3D {
         return;
       }
 
-      el.innerHTML = `<span>●</span> ${h.name || `Hippo ${h.slot + 1}`}`;
+      // White bold text with dark outline (from screenshots)
+      el.innerHTML = `${h.name || `Hippo ${h.slot + 1}`}`;
 
       const charMesh = this.characterMeshes[h.slot];
       if (charMesh && charMesh.visible) {
         const worldPos = new THREE.Vector3();
         charMesh.getWorldPosition(worldPos);
-        worldPos.y += 35; // Head offset in world coordinates
+        worldPos.y += 28;
 
         const projected = worldPos.clone().project(this.camera);
         if (projected.z > 1.0) {
@@ -438,7 +450,7 @@ class Renderer3D {
           return;
         }
 
-        el.style.display = 'flex';
+        el.style.display = 'block';
         const screenX = (projected.x * widthHalf) + widthHalf;
         const screenY = -(projected.y * heightHalf) + heightHalf;
         el.style.left = `${screenX}px`;
@@ -447,15 +459,15 @@ class Renderer3D {
     });
   }
 
-  addFartParticle(x, y, angle, power = 1.0) {
-    // In 3D: world pos on raft rim
-    const buttDir = new THREE.Vector3(Math.cos(angle), 0.18, Math.sin(angle)).normalize();
-    const spawnPos = new THREE.Vector3(x, 10, y);
-    this.particles.emitFart(spawnPos, buttDir, 160.0 * power, 4);
+  addFartParticle(x, y, angle) {
+    // Direction outward from butt over the water
+    const buttDir = new THREE.Vector3(Math.cos(angle), 0.12, Math.sin(angle)).normalize();
+    const spawnPos = new THREE.Vector3(x, 7, y);
+    this.particles.emitFart(spawnPos, buttDir, 160.0, 5);
   }
 
   addExplosion(x, y) {
-    this.particles.emitExplosion(new THREE.Vector3(x, 12, y));
+    this.particles.emitExplosion(new THREE.Vector3(x, 10, y));
   }
 }
 

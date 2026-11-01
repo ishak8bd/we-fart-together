@@ -1,6 +1,6 @@
 /**
  * We Fart Together — Mobile Client & Interpolation Engine
- * Handles Socket.IO networking, snapshot interpolation, touch joystick, and hold-to-charge fart button.
+ * Handles Socket.IO networking, snapshot interpolation, touch joystick, and FART button.
  */
 
 class ClientGameApp {
@@ -25,11 +25,8 @@ class ClientGameApp {
     this.interpolationDelay = 65; // ms
 
     // Local Controls
-    this.hippoTargetAngle = -Math.PI / 2;
+    this.hippoTargetAngle = Math.PI; // Default back of raft (thrusts forward)
     this.isFarting = false;
-    this.fartCharge = 0.0;
-    this.isCharging = false;
-    this.chargeStartTime = 0;
 
     // Wake Lock
     this.wakeLock = null;
@@ -66,24 +63,23 @@ class ClientGameApp {
     // Snapshot from authoritative server (~25 Hz)
     this.socket.on('snapshot', (snapshot) => {
       this.snapshotBuffer.push(snapshot);
-      // Keep buffer compact
       if (this.snapshotBuffer.length > 30) {
         this.snapshotBuffer.shift();
       }
 
       // Check for particle events from active farting hippos
-      if (snapshot.raft && snapshot.hippos) {
+      if (snapshot.raft && snapshot.hippos && !snapshot.raft.isDead) {
         snapshot.hippos.forEach(h => {
-          if (h.isFarting) {
+          if (h.isFarting && h.connected) {
             const buttAngle = snapshot.raft.angle + h.angle;
-            const hx = snapshot.raft.x + 55 * Math.cos(buttAngle);
-            const hy = snapshot.raft.y + 55 * Math.sin(buttAngle);
-            this.renderer.addFartParticle(hx, hy, buttAngle, 1.0 + (h.fartCharge || 0));
+            const hx = snapshot.raft.x + 36 * Math.cos(buttAngle);
+            const hy = snapshot.raft.y + 36 * Math.sin(buttAngle);
+            this.renderer.addFartParticle(hx, hy, buttAngle);
           }
         });
       }
 
-      // Update HUD Timer
+      // Update HUD Timer (format mm:ss.ms)
       if (snapshot.timer !== undefined) {
         document.getElementById('hud-timer').textContent = this.formatTime(snapshot.timer);
       }
@@ -118,6 +114,10 @@ class ClientGameApp {
       if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
     });
 
+    this.socket.on('raft_respawned', ({ checkpointId }) => {
+      this.showToast(`RESPAWNED AT CHECKPOINT ${checkpointId}`);
+    });
+
     this.socket.on('boost_activated', ({ x, y }) => {
       if (window.soundEngine) window.soundEngine.playBoost();
       if (navigator.vibrate) navigator.vibrate(40);
@@ -125,7 +125,6 @@ class ClientGameApp {
 
     this.socket.on('checkpoint_reached', ({ checkpointId, label }) => {
       if (window.soundEngine) window.soundEngine.playCheckpoint();
-      document.getElementById('hud-checkpoint').textContent = `${checkpointId + 1} / ${this.levelData.checkpoints.length}`;
       this.showToast(label);
     });
 
@@ -150,9 +149,6 @@ class ClientGameApp {
     }
   }
 
-  /**
-   * Request Screen Wake Lock so screen doesn't dim/sleep
-   */
   async requestWakeLock() {
     try {
       if ('wakeLock' in navigator) {
@@ -167,13 +163,13 @@ class ClientGameApp {
   }
 
   /**
-   * Mobile Touch Joystick & Hold-To-Charge FART Button
+   * Mobile Touch Controls & Suicide Button
    */
   initInput() {
     const joystickArea = document.getElementById('touch-joystick');
     const joystickNub = document.getElementById('joystick-nub');
     const fartBtn = document.getElementById('btn-fart');
-    const chargeRing = document.getElementById('fart-charge-fill');
+    const suicideBtn = document.getElementById('btn-suicide');
 
     // 1. Left Side Touch Joystick for moving around the circular edge
     let isTouchingJoystick = false;
@@ -213,59 +209,46 @@ class ClientGameApp {
     window.addEventListener('pointerup', onJoyEnd);
     window.addEventListener('pointercancel', onJoyEnd);
 
-    // 2. Right Side Hold-To-Charge FART Button
-    let chargeInterval = null;
-
-    const startCharge = (e) => {
+    // 2. Right Side FART Button (Simple Hold to Thrust, no charge multiplier)
+    const onFartDown = (e) => {
       e.preventDefault();
       if (window.soundEngine) window.soundEngine.ensureContext();
-      this.isCharging = true;
       this.isFarting = true;
-      this.chargeStartTime = performance.now();
       fartBtn.classList.add('active');
 
-      clearInterval(chargeInterval);
-      chargeInterval = setInterval(() => {
-        if (!this.isCharging) return;
-        const elapsed = (performance.now() - this.chargeStartTime) / 1000;
-        this.fartCharge = Math.min(2.0, elapsed * 1.4); // Charges up to 2.0x in ~1.4s
-        const pct = (this.fartCharge / 2.0) * 100;
-        chargeRing.style.strokeDashoffset = `${100 - pct}`;
-        this.sendInput();
-      }, 30);
-
-      this.sendInput();
-    };
-
-    const releaseCharge = (e) => {
-      e.preventDefault();
-      clearInterval(chargeInterval);
-      if (!this.isCharging) return;
-
-      this.isCharging = false;
-      fartBtn.classList.remove('active');
-      chargeRing.style.strokeDashoffset = `100`;
-
-      // Trigger Fart Audio & Haptics with charge boost
       if (window.soundEngine) {
-        window.soundEngine.playFart(1.0, 1.0 + this.fartCharge);
+        window.soundEngine.playFart(1.0, 1.0);
       }
       if (navigator.vibrate) {
-        navigator.vibrate(Math.min(100, Math.floor(40 + this.fartCharge * 35)));
+        navigator.vibrate(50);
       }
-
-      // Reset
-      this.isFarting = false;
-      this.fartCharge = 0.0;
       this.sendInput();
     };
 
-    fartBtn.addEventListener('pointerdown', startCharge);
-    fartBtn.addEventListener('pointerup', releaseCharge);
-    fartBtn.addEventListener('pointerleave', releaseCharge);
-    fartBtn.addEventListener('pointercancel', releaseCharge);
+    const onFartUp = (e) => {
+      e.preventDefault();
+      if (!this.isFarting) return;
+      this.isFarting = false;
+      fartBtn.classList.remove('active');
+      this.sendInput();
+    };
 
-    // 3. Desktop Keyboard Controls
+    fartBtn.addEventListener('pointerdown', onFartDown);
+    fartBtn.addEventListener('pointerup', onFartUp);
+    fartBtn.addEventListener('pointerleave', onFartUp);
+    fartBtn.addEventListener('pointercancel', onFartUp);
+
+    // 3. Suicide Button
+    if (suicideBtn) {
+      suicideBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.socket && this.socket.connected) {
+          this.socket.emit('player_suicide');
+        }
+      });
+    }
+
+    // 4. Desktop Keyboard Controls
     const keys = {};
     window.addEventListener('keydown', (e) => {
       if (keys[e.code]) return;
@@ -281,14 +264,19 @@ class ClientGameApp {
         this.sendInput();
       }
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
-        startCharge(e);
+        onFartDown(e);
+      }
+      if (e.code === 'KeyK') {
+        if (this.socket && this.socket.connected) {
+          this.socket.emit('player_suicide');
+        }
       }
     });
 
     window.addEventListener('keyup', (e) => {
       keys[e.code] = false;
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
-        releaseCharge(e);
+        onFartUp(e);
       }
     });
   }
@@ -297,16 +285,11 @@ class ClientGameApp {
     if (!this.socket || !this.socket.connected) return;
     this.socket.emit('player_input', {
       targetAngle: this.hippoTargetAngle,
-      isFarting: this.isFarting,
-      fartCharge: this.fartCharge
+      isFarting: this.isFarting
     });
   }
 
-  /**
-   * UI & Lobby Screens
-   */
   initUI() {
-    // Player Count Selector Buttons (1 to 4 players)
     let selectedPlayerCount = 1;
     const countBtns = document.querySelectorAll('.count-btn');
     countBtns.forEach(btn => {
@@ -317,7 +300,6 @@ class ClientGameApp {
       });
     });
 
-    // Create Room Button
     document.getElementById('btn-create-room').addEventListener('click', () => {
       const name = document.getElementById('player-name-input').value.trim() || this.playerName;
       const levelId = parseInt(document.getElementById('level-select').value) || 1;
@@ -337,9 +319,8 @@ class ClientGameApp {
           document.getElementById('hud-room-code').textContent = this.roomCode;
 
           if (res.targetCount === 1) {
-            // Solo starts immediately!
+            // Solo starts immediately
           } else {
-            // Show waiting room
             document.getElementById('lobby-screen').classList.add('hidden');
             document.getElementById('waiting-screen').classList.remove('hidden');
             document.getElementById('waiting-code-display').textContent = this.roomCode;
@@ -349,7 +330,6 @@ class ClientGameApp {
       });
     });
 
-    // Join Room Button
     document.getElementById('btn-join-room').addEventListener('click', () => {
       const code = document.getElementById('join-code-input').value.trim().toUpperCase();
       const name = document.getElementById('player-name-input').value.trim() || this.playerName;
@@ -385,7 +365,6 @@ class ClientGameApp {
       });
     });
 
-    // Copy Share Link Button
     document.getElementById('btn-copy-link').addEventListener('click', () => {
       const link = `${window.location.origin}${window.location.pathname}?room=${this.roomCode}`;
       navigator.clipboard.writeText(link).then(() => {
@@ -393,13 +372,11 @@ class ClientGameApp {
       });
     });
 
-    // Sound Mute Toggle
     document.getElementById('btn-sound-toggle').addEventListener('click', () => {
       const isMuted = window.soundEngine.toggleMute();
       document.getElementById('sound-icon').textContent = isMuted ? '🔇' : '🔊';
     });
 
-    // Next Level / Restart in Victory Modal
     document.getElementById('btn-restart-game').addEventListener('click', () => {
       document.getElementById('victory-modal').classList.add('hidden');
       const nextLevel = (this.levelData.id % 3) + 1;
@@ -434,9 +411,6 @@ class ClientGameApp {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${cs.toString().padStart(2, '0')}`;
   }
 
-  /**
-   * Main 60 FPS Render Loop with Snapshot Interpolation
-   */
   startRenderLoop() {
     let lastTime = performance.now();
 
@@ -445,7 +419,6 @@ class ClientGameApp {
       const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
       lastTime = currentTime;
 
-      // Interpolate Server Snapshot
       const interpolated = this.getInterpolatedState(Date.now() - this.interpolationDelay);
 
       if (interpolated) {
@@ -463,23 +436,17 @@ class ClientGameApp {
     requestAnimationFrame(loop);
   }
 
-  /**
-   * Snapshot Buffer Interpolator: Finds snapshots s0 and s1 bounding renderTime and lerps
-   */
   getInterpolatedState(renderTime) {
     const buffer = this.snapshotBuffer;
     if (buffer.length === 0) return null;
 
-    // If renderTime is older than first snapshot, return earliest
     if (renderTime <= buffer[0].time) {
       return buffer[0];
     }
-    // If renderTime is newer than latest snapshot, return latest
     if (renderTime >= buffer[buffer.length - 1].time) {
       return buffer[buffer.length - 1];
     }
 
-    // Find bounding snapshots
     for (let i = 0; i < buffer.length - 1; i++) {
       const s0 = buffer[i];
       const s1 = buffer[i + 1];
@@ -487,18 +454,16 @@ class ClientGameApp {
       if (renderTime >= s0.time && renderTime <= s1.time) {
         const factor = (renderTime - s0.time) / (s1.time - s0.time);
 
-        // Interpolate Raft Position & Angle
         const raft = {
           x: s0.raft.x + (s1.raft.x - s0.raft.x) * factor,
           y: s0.raft.y + (s1.raft.y - s0.raft.y) * factor,
           angle: this.lerpAngle(s0.raft.angle, s1.raft.angle, factor),
           vx: (s0.raft.vx || 0) + ((s1.raft.vx || 0) - (s0.raft.vx || 0)) * factor,
           vy: (s0.raft.vy || 0) + ((s1.raft.vy || 0) - (s0.raft.vy || 0)) * factor,
-          vRot: (s0.raft.vRot || 0) + ((s1.raft.vRot || 0) - (s0.raft.vRot || 0)) * factor,
+          vRot: 0,
           isDead: s1.raft.isDead
         };
 
-        // Interpolate Hippos
         const hippos = s1.hippos.map((h1) => {
           const h0 = s0.hippos.find(h => h.slot === h1.slot) || h1;
           return {
@@ -506,7 +471,6 @@ class ClientGameApp {
             name: h1.name,
             angle: this.lerpAngle(h0.angle, h1.angle, factor),
             isFarting: h1.isFarting,
-            fartCharge: h1.fartCharge,
             connected: h1.connected,
             color: h1.color
           };
@@ -530,11 +494,9 @@ class ClientGameApp {
   }
 }
 
-// Start Client Game App on DOM Load
 window.addEventListener('DOMContentLoaded', () => {
   window.clientApp = new ClientGameApp();
 
-  // Register Service Worker for PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

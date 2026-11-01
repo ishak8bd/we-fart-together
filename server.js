@@ -1,6 +1,17 @@
 /**
  * We Fart Together — Authoritative Multiplayer Game Server
  * Stack: Node.js + Express + Socket.IO + Matter.js (Server-only physics)
+ *
+ * Implements exact physics specifications:
+ * - Raft Diameter: 80px (Radius: 40px)
+ * - Rotation locked (infinite inertia, follows smoothed track tangent)
+ * - Zero river current (raft sits still in water)
+ * - Fixed thrust per player (opposite pairs cancel exactly)
+ * - Linear water drag: 1 farter ~40 px/s (0.5 D/s), 4 farters ~160 px/s (2.0 D/s)
+ * - Small bounce on walls/rocks (restitution 0.3, friction 0)
+ * - Spiked hazards trigger explosion & drowning (2s respawn delay)
+ * - Continuous boundary polylines with closed end caps
+ * - SUICIDE command for manual checkpoint respawn
  */
 
 const express = require('express');
@@ -8,7 +19,13 @@ const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 const Matter = require('matter-js');
-const { LEVELS, RAFT_RADIUS, RAFT_DIAMETER, MIN_GAP_REQUIRED } = require('./shared/levels');
+const {
+  LEVELS,
+  RAFT_RADIUS,
+  RAFT_DIAMETER,
+  MIN_GAP_REQUIRED,
+  computeBoundaryPolylines
+} = require('./shared/levels');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,12 +41,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/shared', express.static(path.join(__dirname, 'shared')));
 
-// Hippos visual colors for slots 0..3
+// Hippos visual colors for slots 0..3 matching reference screenshots
 const HIPPO_COLORS = [
-  { name: 'Brown Capy-Hippo', hex: '#8d6e63', belly: '#d7ccc8' },
-  { name: 'Teal River-Hippo', hex: '#455a64', belly: '#cfd8dc' },
-  { name: 'Golden Mud-Hippo', hex: '#d97706', belly: '#fef3c7' },
-  { name: 'Lavender Night-Hippo', hex: '#7c3aed', belly: '#ede9fe' }
+  { name: 'Blue Hippo', hex: '#42a5f5', belly: '#bbdefb' },
+  { name: 'Orange Hippo', hex: '#fb8c00', belly: '#ffe0b2' },
+  { name: 'Green Dino-Hippo', hex: '#7cb342', belly: '#dcedc8' },
+  { name: 'Dark Bear', hex: '#4e342e', belly: '#d7ccc8' }
 ];
 
 // Active Game Rooms
@@ -64,7 +81,7 @@ class GameRoom {
     this.disconnectTimers = new Map();
 
     // Game state
-    this.state = 'lobby'; // 'lobby', 'countdown', 'playing', 'paused', 'victory'
+    this.state = 'lobby'; // 'lobby', 'playing', 'paused', 'victory'
     this.pauseReason = '';
     this.currentCheckpoint = 0;
     this.totalFarts = 0;
@@ -73,11 +90,12 @@ class GameRoom {
     this.pauseStartTime = 0;
     this.totalPausedDuration = 0;
     this.seq = 0;
+    this.isRespawning = false;
 
     // Physics Engine (Matter.js)
     this.initPhysics();
 
-    // Fixed timestep loop (60 Hz)
+    // Timestep loops
     this.physicsInterval = null;
     this.broadcastInterval = null;
   }
@@ -88,19 +106,21 @@ class GameRoom {
     });
     this.world = this.engine.world;
 
-    // 1. Create Raft Rigid Body
+    // 1. Create Raft Rigid Body with LOCKED ROTATION (infinite inertia)
     const startPos = this.levelData.startPosition;
     this.raft = Matter.Bodies.circle(startPos.x, startPos.y, RAFT_RADIUS, {
       mass: 4.0,
-      restitution: 0.5,     // Bouncy, prevents sticking
-      friction: 0.02,
-      frictionAir: 0.04,    // Fluid resistance
+      inertia: Infinity,
+      inverseInertia: 0,
+      restitution: 0.3,     // Small realistic bounce
+      friction: 0.0,
+      frictionAir: 0.0,     // Linear water drag applied manually
       label: 'raft'
     });
     Matter.Body.setAngle(this.raft, this.levelData.startAngle);
     Matter.World.add(this.world, this.raft);
 
-    // 2. Build River Canal Walls & Spikes from level waypoints
+    // 2. Build River Canal Walls & Spikes from continuous polylines
     this.wallBodies = [];
     this.spikeBodies = [];
     this.rockBodies = [];
@@ -122,14 +142,13 @@ class GameRoom {
   }
 
   buildTrackColliders() {
-    const pts = this.levelData.waypoints;
-    const wallThick = 40;
+    const { leftPts, rightPts } = computeBoundaryPolylines(this.levelData.waypoints);
+    const wallThick = 50;
 
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-
-      // Segment vector and normal
+    // Left wall continuous segments
+    for (let i = 0; i < leftPts.length - 1; i++) {
+      const p1 = leftPts[i];
+      const p2 = leftPts[i + 1];
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
       const len = Math.hypot(dx, dy);
@@ -137,49 +156,109 @@ class GameRoom {
       const nx = -dy / len;
       const ny = dx / len;
 
-      const halfW1 = p1.width / 2;
-      const halfW2 = p2.width / 2;
-      const midHalfW = (halfW1 + halfW2) / 2;
+      const midX = (p1.x + p2.x) / 2 + nx * (wallThick / 2);
+      const midY = (p1.y + p2.y) / 2 + ny * (wallThick / 2);
 
-      // Left Wall Segment
-      const midLeftX = (p1.x + p2.x) / 2 + nx * (midHalfW + wallThick / 2);
-      const midLeftY = (p1.y + p2.y) / 2 + ny * (midHalfW + wallThick / 2);
-      const leftWall = Matter.Bodies.rectangle(midLeftX, midLeftY, len, wallThick, {
+      const wall = Matter.Bodies.rectangle(midX, midY, len + 10, wallThick, {
         isStatic: true,
         angle: angle,
-        restitution: 0.5,
-        friction: 0.04,
+        restitution: 0.3,
+        friction: 0.0,
         label: 'wall'
       });
-      Matter.World.add(this.world, leftWall);
-      this.wallBodies.push(leftWall);
+      Matter.World.add(this.world, wall);
+      this.wallBodies.push(wall);
 
-      // Right Wall Segment
-      const midRightX = (p1.x + p2.x) / 2 - nx * (midHalfW + wallThick / 2);
-      const midRightY = (p1.y + p2.y) / 2 - ny * (midHalfW + wallThick / 2);
-      const rightWall = Matter.Bodies.rectangle(midRightX, midRightY, len, wallThick, {
+      // Corner joint circle to prevent gaps
+      const joint = Matter.Bodies.circle(p1.x, p1.y, 18, {
         isStatic: true,
-        angle: angle,
-        restitution: 0.5,
-        friction: 0.04,
+        restitution: 0.3,
+        friction: 0.0,
         label: 'wall'
       });
-      Matter.World.add(this.world, rightWall);
-      this.wallBodies.push(rightWall);
+      Matter.World.add(this.world, joint);
+      this.wallBodies.push(joint);
     }
 
-    // Add Obstacles (Rocks, Spikes)
+    // Right wall continuous segments
+    for (let i = 0; i < rightPts.length - 1; i++) {
+      const p1 = rightPts[i];
+      const p2 = rightPts[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+      const nx = dy / len;
+      const ny = -dx / len;
+
+      const midX = (p1.x + p2.x) / 2 + nx * (wallThick / 2);
+      const midY = (p1.y + p2.y) / 2 + ny * (wallThick / 2);
+
+      const wall = Matter.Bodies.rectangle(midX, midY, len + 10, wallThick, {
+        isStatic: true,
+        angle: angle,
+        restitution: 0.3,
+        friction: 0.0,
+        label: 'wall'
+      });
+      Matter.World.add(this.world, wall);
+      this.wallBodies.push(wall);
+
+      // Corner joint circle
+      const joint = Matter.Bodies.circle(p1.x, p1.y, 18, {
+        isStatic: true,
+        restitution: 0.3,
+        friction: 0.0,
+        label: 'wall'
+      });
+      Matter.World.add(this.world, joint);
+      this.wallBodies.push(joint);
+    }
+
+    // End caps:
+    // 1. Behind Start
+    const pStartL = leftPts[0];
+    const pStartR = rightPts[0];
+    const startCapLen = Math.hypot(pStartR.x - pStartL.x, pStartR.y - pStartL.y);
+    const startCapAngle = Math.atan2(pStartR.y - pStartL.y, pStartR.x - pStartL.x);
+    const startCap = Matter.Bodies.rectangle(
+      (pStartL.x + pStartR.x) / 2,
+      (pStartL.y + pStartR.y) / 2 - wallThick / 2,
+      startCapLen + 20,
+      wallThick,
+      { isStatic: true, angle: startCapAngle, restitution: 0.3, friction: 0, label: 'wall' }
+    );
+    Matter.World.add(this.world, startCap);
+    this.wallBodies.push(startCap);
+
+    // 2. Past Finish
+    const lastIdx = leftPts.length - 1;
+    const pEndL = leftPts[lastIdx];
+    const pEndR = rightPts[lastIdx];
+    const endCapLen = Math.hypot(pEndR.x - pEndL.x, pEndR.y - pEndL.y);
+    const endCapAngle = Math.atan2(pEndR.y - pEndL.y, pEndR.x - pEndL.x);
+    const endCap = Matter.Bodies.rectangle(
+      (pEndL.x + pEndR.x) / 2,
+      (pEndL.y + pEndR.y) / 2 + wallThick / 2,
+      endCapLen + 20,
+      wallThick,
+      { isStatic: true, angle: endCapAngle, restitution: 0.3, friction: 0, label: 'wall' }
+    );
+    Matter.World.add(this.world, endCap);
+    this.wallBodies.push(endCap);
+
+    // Obstacles
     this.levelData.obstacles.forEach(obs => {
       if (obs.type === 'rock') {
         const rock = Matter.Bodies.circle(obs.x, obs.y, obs.radius, {
           isStatic: true,
-          restitution: 0.6,
-          friction: 0.02,
+          restitution: 0.3,
+          friction: 0.0,
           label: 'rock'
         });
         Matter.World.add(this.world, rock);
         this.rockBodies.push(rock);
-      } else if (obs.type === 'spike_strip') {
+      } else if (obs.type === 'spike_roller' || obs.type === 'spike_strip') {
         const spike = Matter.Bodies.rectangle(obs.x, obs.y, obs.width, obs.height, {
           isStatic: true,
           angle: obs.angle || 0,
@@ -187,6 +266,14 @@ class GameRoom {
         });
         Matter.World.add(this.world, spike);
         this.spikeBodies.push(spike);
+      } else if (obs.type === 'spike_slab') {
+        const slab = Matter.Bodies.rectangle(obs.x, obs.y, obs.width, obs.height, {
+          isStatic: true,
+          angle: obs.angle || 0,
+          label: 'spike'
+        });
+        Matter.World.add(this.world, slab);
+        this.spikeBodies.push(slab);
       }
     });
   }
@@ -194,10 +281,9 @@ class GameRoom {
   initDynamicObstacles() {
     this.levelData.obstacles.forEach(obs => {
       if (obs.type === 'windmill') {
-        // Center pivot with 4 spiked arm bodies
         const armBodies = [];
         for (let a = 0; a < obs.armCount; a++) {
-          const arm = Matter.Bodies.rectangle(obs.x, obs.y, obs.armLength * 2, 14, {
+          const arm = Matter.Bodies.rectangle(obs.x, obs.y, obs.armLength * 2, 16, {
             isStatic: true,
             label: 'spike'
           });
@@ -227,24 +313,47 @@ class GameRoom {
     });
   }
 
-  /**
-   * Add a player to the room
-   */
+  getTrackTangent(x, y) {
+    const pts = this.levelData.waypoints;
+    let bestDist = Infinity;
+    let segIdx = 0;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const dist = Math.hypot(x - midX, y - midY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        segIdx = i;
+      }
+    }
+
+    const p1 = pts[segIdx];
+    const p2 = pts[segIdx + 1];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return {
+      tx: dx / len,
+      ty: dy / len,
+      angle: Math.atan2(dy, dx)
+    };
+  }
+
   addPlayer(socket, token, playerName) {
-    // Check if player is reconnecting with existing token
     if (this.playerTokens.has(token)) {
       const slotIndex = this.playerTokens.get(token);
       const existing = this.players[slotIndex];
       existing.socketId = socket.id;
       existing.connected = true;
 
-      // Cancel disconnect countdown if active
       if (this.disconnectTimers.has(slotIndex)) {
         clearTimeout(this.disconnectTimers.get(slotIndex));
         this.disconnectTimers.delete(slotIndex);
       }
 
-      // If all connected, unpause
       if (this.state === 'paused' && this.allPlayersConnected()) {
         this.resumeGame();
       }
@@ -252,14 +361,18 @@ class GameRoom {
       return { slot: slotIndex, hippo: existing, isReconnect: true };
     }
 
-    // Check if room is full
     if (this.players.length >= this.targetPlayerCount) {
       return { error: `Room ${this.code} is full (${this.targetPlayerCount}/${this.targetPlayerCount} players).` };
     }
 
     const slotIndex = this.players.length;
-    // Distribute default starting angles evenly along rim
-    const defaultAngle = (slotIndex / this.targetPlayerCount) * (Math.PI * 2) - Math.PI / 2;
+    // Default angles around perimeter:
+    // 0: Back (angle = PI, thrusts forward)
+    // 1: Front (angle = 0, thrusts backward)
+    // 2: Left (angle = -PI/2, thrusts right)
+    // 3: Right (angle = PI/2, thrusts left)
+    const angles = [Math.PI, 0, -Math.PI / 2, Math.PI / 2];
+    const defaultAngle = angles[slotIndex % angles.length];
 
     const hippo = {
       slot: slotIndex,
@@ -269,7 +382,6 @@ class GameRoom {
       angle: defaultAngle,
       targetAngle: defaultAngle,
       isFarting: false,
-      fartCharge: 0.0,
       connected: true,
       color: HIPPO_COLORS[slotIndex % HIPPO_COLORS.length]
     };
@@ -277,9 +389,6 @@ class GameRoom {
     this.players.push(hippo);
     this.playerTokens.set(token, slotIndex);
 
-    // Auto-start check:
-    // Solo (N=1) starts immediately!
-    // For N >= 2, starts as soon as room is full!
     if (this.players.length === this.targetPlayerCount && this.state === 'lobby') {
       this.startGame();
     }
@@ -301,7 +410,6 @@ class GameRoom {
     if (this.state === 'playing') {
       this.pauseGame(`Player ${player.name} disconnected! Rejoin within 30s.`);
 
-      // 30-second reconnection window
       const timer = setTimeout(() => {
         this.disconnectTimers.delete(player.slot);
         io.to(this.code).emit('room_abandoned', {
@@ -315,15 +423,20 @@ class GameRoom {
   }
 
   startGame() {
+    // Clear any previous interval to prevent duplicate loop bugs
+    clearInterval(this.physicsInterval);
+    clearInterval(this.broadcastInterval);
+
     this.state = 'playing';
     this.startTime = Date.now();
     this.totalPausedDuration = 0;
+    this.isRespawning = false;
     this.respawnAtCheckpoint(0);
 
-    // Start 60 Hz physics loop
+    // 60 Hz physics loop
     this.physicsInterval = setInterval(() => this.physicsTick(), 1000 / 60);
 
-    // Start 25 Hz snapshot broadcast loop
+    // 25 Hz snapshot broadcast loop
     this.broadcastInterval = setInterval(() => this.broadcastSnapshot(), 1000 / 25);
 
     io.to(this.code).emit('game_started', {
@@ -363,76 +476,108 @@ class GameRoom {
     return Math.max(0, current - this.startTime - this.totalPausedDuration);
   }
 
-  /**
-   * Update Player Inputs (Move along rim, Fart charge)
-   */
   handlePlayerInput(slotIndex, input) {
     if (this.state !== 'playing' || !this.players[slotIndex]) return;
     const hippo = this.players[slotIndex];
 
-    // Angle movement around perimeter
-    if (typeof input.targetAngle === 'number') {
+    if (typeof input.targetAngle === 'number' && !isNaN(input.targetAngle)) {
       hippo.targetAngle = input.targetAngle;
-    } else if (typeof input.deltaAngle === 'number') {
-      hippo.targetAngle += input.deltaAngle;
     }
-
-    // Fart button press & charge
     if (typeof input.isFarting === 'boolean') {
       hippo.isFarting = input.isFarting;
-    }
-    if (typeof input.fartCharge === 'number') {
-      hippo.fartCharge = Math.max(0, Math.min(2.5, input.fartCharge));
     }
   }
 
   /**
-   * 60 Hz Matter.js Physics Step
+   * 60 Hz Fixed Physics Step with 2 Substeps
    */
   physicsTick() {
     if (this.state !== 'playing') return;
 
-    const dt = 1000 / 60;
+    const dt = 1 / 60; // seconds
 
-    // 1. Update Hippo positions along rim with non-overlapping circular collision
-    this.updateHippoPositions(dt / 1000);
+    // 1. Update Hippo positions along rim
+    this.updateHippoPositions(dt);
 
-    // 2. Downstream River Current Force
-    this.applyRiverCurrent();
+    if (this.isRespawning) {
+      // Raft is exploded / respawning
+      Matter.Body.setVelocity(this.raft, { x: 0, y: 0 });
+      return;
+    }
 
-    // 3. Apply Fart Impulses & Torques from each farting hippo
-    this.applyFartForces();
+    // 2. Align raft rotation with track heading
+    const track = this.getTrackTangent(this.raft.position.x, this.raft.position.y);
+    Matter.Body.setAngle(this.raft, track.angle);
+    Matter.Body.setAngularVelocity(this.raft, 0);
 
-    // 4. Update Dynamic Obstacles (Windmills, Rollers)
+    // 3. Compute Vector Sum of Fart Forces
+    // Each farting player produces fixed thrust F0 = 40 px/s^2 * mass
+    // Inward towards center (opposite to butt)
+    const thrustAcc = 40.0; // px/s^2 per player
+    let netAccX = 0;
+    let netAccY = 0;
+
+    for (const h of this.players) {
+      if (h.isFarting && h.connected) {
+        this.totalFarts++;
+        // World butt angle = track.angle + h.angle
+        const worldButtAngle = track.angle + h.angle;
+        // Thrust is opposite to butt:
+        netAccX += -Math.cos(worldButtAngle) * thrustAcc;
+        netAccY += -Math.sin(worldButtAngle) * thrustAcc;
+      }
+    }
+
+    // 4. Update Dynamic Obstacles
     this.updateDynamicObstacles();
 
-    // 5. Matter.js engine step
-    Matter.Engine.update(this.engine, dt);
+    // 5. Physics Substeps (2 substeps per tick for anti-tunneling)
+    const substeps = 2;
+    const subDt = dt / substeps;
+    const linearDamping = 1.0; // s^-1 (tau = 1s, steady state 1 farter = 40 px/s, 4 = 160 px/s)
+
+    for (let s = 0; s < substeps; s++) {
+      let vx = this.raft.velocity.x;
+      let vy = this.raft.velocity.y;
+
+      // Linear water drag
+      vx = vx * (1 - linearDamping * subDt) + netAccX * subDt;
+      vy = vy * (1 - linearDamping * subDt) + netAccY * subDt;
+
+      // Max speed cap (220 px/s)
+      const speed = Math.hypot(vx, vy);
+      const maxSpeed = 220;
+      if (speed > maxSpeed) {
+        vx = (vx / speed) * maxSpeed;
+        vy = (vy / speed) * maxSpeed;
+      }
+
+      Matter.Body.setVelocity(this.raft, { x: vx, y: vy });
+
+      // Step physics engine
+      Matter.Engine.update(this.engine, subDt * 1000);
+
+      // Lock rotation strictly to track angle
+      Matter.Body.setAngle(this.raft, track.angle);
+      Matter.Body.setAngularVelocity(this.raft, 0);
+    }
 
     // 6. Checkpoint & Boost Pad Triggers
     this.checkTriggers();
   }
 
-  /**
-   * Move hippos around the edge without overlapping
-   */
   updateHippoPositions(dtSeconds) {
     const minSeparation = 0.52; // ~30 degrees separation
     const moveSpeed = 4.0; // rad/s
 
-    // Move smoothly towards targetAngle
     for (const h of this.players) {
       let diff = h.targetAngle - h.angle;
-      // Normalize to [-PI, PI]
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       h.angle += Math.sign(diff) * Math.min(Math.abs(diff), moveSpeed * dtSeconds);
-      // Normalize h.angle to [-PI, PI]
       h.angle = Math.atan2(Math.sin(h.angle), Math.cos(h.angle));
     }
 
-    // If multiple players, enforce non-overlapping circular order
     if (this.players.length > 1) {
-      // Sort by angle
       const sorted = [...this.players].sort((a, b) => a.angle - b.angle);
       const count = sorted.length;
 
@@ -448,77 +593,6 @@ class GameRoom {
           curr.angle -= overlap / 2;
           next.angle += overlap / 2;
         }
-      }
-    }
-  }
-
-  /**
-   * Passive Downstream Water Current
-   */
-  applyRiverCurrent() {
-    const raftPos = this.raft.position;
-    const pts = this.levelData.waypoints;
-
-    // Find current waypoint segment
-    let bestDist = Infinity;
-    let segIdx = 0;
-
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      const dist = Math.hypot(raftPos.x - midX, raftPos.y - midY);
-      if (dist < bestDist) {
-        bestDist = dist;
-        segIdx = i;
-      }
-    }
-
-    const p1 = pts[segIdx];
-    const p2 = pts[segIdx + 1];
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const dirX = dx / len;
-    const dirY = dy / len;
-
-    // Gentle passive water flow (doesn't rush downstream without farting)
-    const currentForce = 0.00035 * this.levelData.currentSpeed;
-    Matter.Body.applyForce(this.raft, this.raft.position, {
-      x: dirX * currentForce,
-      y: dirY * currentForce
-    });
-  }
-
-  /**
-   * Apply Fart Force opposite to hippo butt direction
-   */
-  applyFartForces() {
-    const raftPos = this.raft.position;
-    const raftAngle = this.raft.angle;
-    const baseFartPower = 0.016; // Powerful, satisfying fart propulsion!
-
-    for (const h of this.players) {
-      if (h.isFarting) {
-        this.totalFarts++;
-
-        // Charge power multiplier (1.0x to 2.5x)
-        const powerMultiplier = 1.0 + (h.fartCharge || 0);
-
-        // Butt faces outside: world angle = raftAngle + h.angle
-        const buttAngle = raftAngle + h.angle;
-
-        // Hippo position on rim
-        const hippoX = raftPos.x + RAFT_RADIUS * Math.cos(buttAngle);
-        const hippoY = raftPos.y + RAFT_RADIUS * Math.sin(buttAngle);
-
-        // Force pushes opposite to butt (inward towards raft):
-        const forceX = -Math.cos(buttAngle) * baseFartPower * powerMultiplier;
-        const forceY = -Math.sin(buttAngle) * baseFartPower * powerMultiplier;
-
-        // Matter.js applies force at world position, naturally calculating both linear push & torque!
-        Matter.Body.applyForce(this.raft, { x: hippoX, y: hippoY }, { x: forceX, y: forceY });
       }
     }
   }
@@ -544,24 +618,28 @@ class GameRoom {
 
   checkTriggers() {
     const raftPos = this.raft.position;
+    const now = Date.now();
 
     // Check Boost Chevrons
     this.levelData.obstacles.forEach(obs => {
       if (obs.type === 'boost') {
         const dist = Math.hypot(raftPos.x - obs.x, raftPos.y - obs.y);
         if (dist < obs.radius + RAFT_RADIUS) {
-          // Launch raft forward along current velocity or downward
-          const currentVel = this.raft.velocity;
-          const speed = Math.hypot(currentVel.x, currentVel.y) || 1;
-          const dirX = currentVel.x / speed;
-          const dirY = (currentVel.y / speed) || 1;
+          // Check cooldown (1.5s)
+          if (!obs._lastTrigger || now - obs._lastTrigger > 1500) {
+            obs._lastTrigger = now;
+            const track = this.getTrackTangent(obs.x, obs.y);
+            const currentVel = this.raft.velocity;
+            const currentSpeed = Math.hypot(currentVel.x, currentVel.y);
+            const boostSpeed = Math.max(currentSpeed + obs.power * 4, 120);
 
-          Matter.Body.setVelocity(this.raft, {
-            x: dirX * (speed + obs.power * 0.4),
-            y: dirY * (speed + obs.power * 0.4)
-          });
+            Matter.Body.setVelocity(this.raft, {
+              x: track.tx * boostSpeed,
+              y: track.ty * boostSpeed
+            });
 
-          io.to(this.code).emit('boost_activated', { x: obs.x, y: obs.y });
+            io.to(this.code).emit('boost_activated', { x: obs.x, y: obs.y });
+          }
         }
       }
     });
@@ -576,7 +654,6 @@ class GameRoom {
         this.currentCheckpoint = i;
 
         if (i === cps.length - 1) {
-          // Finish Line reached!
           this.triggerVictory();
         } else {
           io.to(this.code).emit('checkpoint_reached', {
@@ -600,19 +677,26 @@ class GameRoom {
       y: this.raft.position.y
     });
 
-    // 0.8s reset delay
+    // 2.0s delay for explosion & drowning animations
     setTimeout(() => {
       this.respawnAtCheckpoint(this.currentCheckpoint);
       this.isRespawning = false;
-    }, 800);
+    }, 2000);
   }
 
   respawnAtCheckpoint(cpIndex) {
     const cp = this.levelData.checkpoints[cpIndex] || this.levelData.checkpoints[0];
+    const track = this.getTrackTangent(cp.x, cp.y);
     Matter.Body.setPosition(this.raft, { x: cp.x, y: cp.y + 40 });
     Matter.Body.setVelocity(this.raft, { x: 0, y: 0 });
     Matter.Body.setAngularVelocity(this.raft, 0);
-    Matter.Body.setAngle(this.raft, Math.PI / 2);
+    Matter.Body.setAngle(this.raft, track.angle);
+
+    io.to(this.code).emit('raft_respawned', {
+      checkpointId: cpIndex,
+      x: cp.x,
+      y: cp.y + 40
+    });
   }
 
   triggerVictory() {
@@ -627,21 +711,20 @@ class GameRoom {
   }
 
   restartLevel(levelId = this.levelId) {
+    clearInterval(this.physicsInterval);
+    clearInterval(this.broadcastInterval);
+
     this.levelId = levelId;
     this.levelData = LEVELS.find(l => l.id === levelId) || LEVELS[0];
     this.currentCheckpoint = 0;
     this.totalFarts = 0;
     this.totalDeaths = 0;
 
-    // Rebuild physics world
     Matter.World.clear(this.world, false);
     this.initPhysics();
     this.startGame();
   }
 
-  /**
-   * Broadcast Authoritative Snapshot to Clients at ~25 Hz
-   */
   broadcastSnapshot() {
     if (this.state !== 'playing' && this.state !== 'paused') return;
 
@@ -668,14 +751,14 @@ class GameRoom {
         angle: this.raft.angle,
         vx: this.raft.velocity.x,
         vy: this.raft.velocity.y,
-        vRot: this.raft.angularVelocity
+        vRot: 0,
+        isDead: this.isRespawning
       },
       hippos: this.players.map(h => ({
         slot: h.slot,
         name: h.name,
         angle: h.angle,
         isFarting: h.isFarting,
-        fartCharge: h.fartCharge,
         connected: h.connected,
         color: h.color
       })),
@@ -700,12 +783,10 @@ io.on('connection', (socket) => {
   let currentRoom = null;
   let playerSlot = null;
 
-  // Heartbeat ping-pong for latency measurement
   socket.on('client_ping', (clientTime) => {
     socket.emit('server_pong', clientTime);
   });
 
-  // Host Creates Room
   socket.on('create_room', ({ playerCount, levelId, playerName, token }, callback) => {
     const code = generateRoomCode();
     const room = new GameRoom(code, socket.id, playerCount, levelId || 1);
@@ -728,7 +809,6 @@ io.on('connection', (socket) => {
     console.log(`[Room ${code}] Created by ${playerName} for ${playerCount} players.`);
   });
 
-  // Player Joins Existing Room
   socket.on('join_room', ({ code, playerName, token }, callback) => {
     const upperCode = (code || '').toUpperCase().trim();
     const room = rooms.get(upperCode);
@@ -765,21 +845,25 @@ io.on('connection', (socket) => {
     console.log(`[Room ${upperCode}] Player ${playerName} joined (Slot ${result.slot}).`);
   });
 
-  // Player Input (Move joystick & Fart button)
   socket.on('player_input', (input) => {
     if (currentRoom && playerSlot !== null) {
       currentRoom.handlePlayerInput(playerSlot, input);
     }
   });
 
-  // Host Restarts Game or Changes Level
+  // SUICIDE command: explodes raft and respawns at checkpoint
+  socket.on('player_suicide', () => {
+    if (currentRoom && currentRoom.state === 'playing') {
+      currentRoom.handleRaftPop("Self-destruct!");
+    }
+  });
+
   socket.on('restart_game', ({ levelId }) => {
     if (currentRoom && currentRoom.hostSocketId === socket.id) {
       currentRoom.restartLevel(levelId || currentRoom.levelId);
     }
   });
 
-  // Disconnection
   socket.on('disconnect', () => {
     if (currentRoom) {
       currentRoom.handleDisconnect(socket.id);

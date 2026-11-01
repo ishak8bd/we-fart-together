@@ -1,232 +1,225 @@
 /**
  * We Fart Together — Procedural 3D Model Factory
- * Generates stylized low-poly characters, donut raft, obstacles, and props matching the reference clips.
- * Perfectly proportioned for the physics world coordinates (raft radius 55px).
+ * Recreates the exact visual experience from the reference game:
+ * - Raft: Flat circular inflatable ring (cream/peach tube, gold loops, teal skirt, green plank deck)
+ * - Characters: Chunky cartoon animals (blue hippo, orange hippo, green dino, dark bear) with red boxing-glove paws
+ * - Hazards: Pink/magenta spiked bank cylinders, grey spiked slab gates, rotating spiked bars, grey rocks
+ * - Environment: Bamboo START/FINISH arches with palm thatch, lily pads with pink flowers, bamboo stalks, trees
  */
 
 const ModelFactory = {
-  // Shared materials for performance
+  // Shared materials for optimal performance
   materials: {
-    tubeOrange: new THREE.MeshStandardMaterial({ color: 0xff7043, roughness: 0.45, metalness: 0.05 }),
-    deckGreen: new THREE.MeshStandardMaterial({ color: 0x66bb6a, roughness: 0.65 }),
-    handleDark: new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.4 }),
-    handleGrip: new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.3 }),
+    // Raft Materials (from screenshots: cream tube, gold loops, teal skirt, green plank deck)
+    tubePeach: new THREE.MeshStandardMaterial({ color: 0xfcd5b5, roughness: 0.4, metalness: 0.05 }),
+    skirtTeal: new THREE.MeshStandardMaterial({ color: 0x26c6da, roughness: 0.5, metalness: 0.1 }),
+    deckWoodGreen: new THREE.MeshStandardMaterial({ color: 0x7cb342, roughness: 0.7 }),
+    deckPlankLine: new THREE.MeshStandardMaterial({ color: 0x558b2f, roughness: 0.8 }),
+    goldLoop: new THREE.MeshStandardMaterial({ color: 0xfbc02d, roughness: 0.3, metalness: 0.4 }),
+    gloveRed: new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.35, metalness: 0.05 }),
     
-    // Animal Materials
-    capyBrown: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.75 }),
-    capySnout: new THREE.MeshStandardMaterial({ color: 0x795548, roughness: 0.7 }),
-    hippoTeal: new THREE.MeshStandardMaterial({ color: 0x455a64, roughness: 0.75 }),
-    hippoSnout: new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.7 }),
+    // Character Body Materials
+    hippoBlue: new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.75 }),
+    hippoOrange: new THREE.MeshStandardMaterial({ color: 0xfb8c00, roughness: 0.75 }),
+    hippoGreen: new THREE.MeshStandardMaterial({ color: 0x7cb342, roughness: 0.75 }),
+    bearDark: new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 0.8 }),
+    
+    snoutLight: new THREE.MeshStandardMaterial({ color: 0xffe0b2, roughness: 0.7 }),
+    snoutBlue: new THREE.MeshStandardMaterial({ color: 0x90caf9, roughness: 0.7 }),
+    snoutGreen: new THREE.MeshStandardMaterial({ color: 0xaed581, roughness: 0.7 }),
+    snoutDark: new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.8 }),
     blackEye: new THREE.MeshBasicMaterial({ color: 0x111111 }),
     pinkNose: new THREE.MeshStandardMaterial({ color: 0xf48fb1, roughness: 0.6 }),
     
-    // Hazard Materials
-    spikePurple: new THREE.MeshStandardMaterial({ color: 0x8e24aa, roughness: 0.35 }),
-    spikeWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }),
-    woodBrown: new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.85 }),
+    // Hazard Materials (from screenshots: pink cylinders with white spikes, grey slabs with white spikes)
+    spikePink: new THREE.MeshStandardMaterial({ color: 0xe91e63, roughness: 0.35 }),
+    spikeWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15 }),
+    slabGrey: new THREE.MeshStandardMaterial({ color: 0x546e7a, roughness: 0.55 }),
     woodDark: new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.9 }),
-    bannerYellow: new THREE.MeshStandardMaterial({ color: 0xfbc02d, roughness: 0.35 }),
+    woodBamboo: new THREE.MeshStandardMaterial({ color: 0xd7ccc8, roughness: 0.8 }),
+    thatchPalm: new THREE.MeshStandardMaterial({ color: 0x8bc34a, roughness: 0.9 }),
+    rockGrey: new THREE.MeshStandardMaterial({ color: 0x607d8b, roughness: 0.9, flatShading: true }),
+    
+    // Scenery & FX
     boostRed: new THREE.MeshStandardMaterial({ color: 0xff3d00, emissive: 0xdd2c00, roughness: 0.2 }),
-    rockGrey: new THREE.MeshStandardMaterial({ color: 0x607d8b, roughness: 0.9, flatShading: true })
+    boostWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }),
+    lilyGreen: new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.8 }),
+    flowerPink: new THREE.MeshStandardMaterial({ color: 0xf48fb1, roughness: 0.5 }),
+    flowerYellow: new THREE.MeshStandardMaterial({ color: 0xffeb3b, roughness: 0.4 })
   },
 
   /**
-   * Build the Circular Donut Raft with 4 Handles (unit scale, scaled by RAFT_SCALE = 55/1.5 in Renderer3D)
+   * Build the Circular Donut Raft at exact 80px diameter (40px radius)
    */
   createRaft() {
     const group = new THREE.Group();
     group.name = "Raft";
 
-    // 1. Inflatable Outer Donut Tube (Torus: major radius 1.5, tube radius 0.45)
-    const tubeGeo = new THREE.TorusGeometry(1.5, 0.45, 18, 36);
+    // 1. Teal Skirt Underneath
+    const skirtGeo = new THREE.TorusGeometry(32, 6, 16, 32);
+    skirtGeo.rotateX(Math.PI / 2);
+    const skirt = new THREE.Mesh(skirtGeo, this.materials.skirtTeal);
+    skirt.position.y = -3.5;
+    group.add(skirt);
+
+    // 2. Inflatable Peach/Cream Donut Tube (Major radius 32, tube radius 8 -> outer radius 40px)
+    const tubeGeo = new THREE.TorusGeometry(32, 8, 18, 36);
     tubeGeo.rotateX(Math.PI / 2);
-    const tube = new THREE.Mesh(tubeGeo, this.materials.tubeOrange);
+    const tube = new THREE.Mesh(tubeGeo, this.materials.tubePeach);
     tube.castShadow = true;
     tube.receiveShadow = true;
     group.add(tube);
 
-    // 2. Trampoline Inner Floor Disc
-    const deckGeo = new THREE.CylinderGeometry(1.22, 1.22, 0.12, 24);
-    deckGeo.translate(0, -0.08, 0);
-    const deck = new THREE.Mesh(deckGeo, this.materials.deckGreen);
+    // 3. Green Wooden-Plank Deck in center
+    const deckGeo = new THREE.CylinderGeometry(28, 28, 3, 28);
+    deckGeo.translate(0, -1.5, 0);
+    const deck = new THREE.Mesh(deckGeo, this.materials.deckWoodGreen);
     deck.receiveShadow = true;
     group.add(deck);
 
-    // 3. Handles at 4 cardinal positions around rim
-    group.handles = [];
-    const angles = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
+    // Parallel wooden plank lines
+    for (let x = -20; x <= 20; x += 8) {
+      const lineLen = Math.sqrt(Math.max(0, 26 * 26 - x * x)) * 2;
+      const plankGeo = new THREE.BoxGeometry(0.8, 0.4, lineLen);
+      const plankLine = new THREE.Mesh(plankGeo, this.materials.deckPlankLine);
+      plankLine.position.set(x, 0.05, 0);
+      group.add(plankLine);
+    }
 
-    angles.forEach((angle) => {
-      const handleGroup = new THREE.Group();
-      handleGroup.rotation.y = angle;
+    // 4. Eight Gold/Yellow loops around the peach tube
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * Math.PI) / 4;
+      const loopGroup = new THREE.Group();
+      loopGroup.rotation.y = angle;
 
-      // Handle Post & Grip
-      const postGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.35, 8);
-      const post1 = new THREE.Mesh(postGeo, this.materials.handleDark);
-      post1.position.set(1.4, 0.22, -0.18);
-      handleGroup.add(post1);
-
-      const post2 = new THREE.Mesh(postGeo, this.materials.handleDark);
-      post2.position.set(1.4, 0.22, 0.18);
-      handleGroup.add(post2);
-
-      const barGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.42, 8);
-      barGeo.rotateX(Math.PI / 2);
-      const bar = new THREE.Mesh(barGeo, this.materials.handleGrip);
-      bar.position.set(1.4, 0.38, 0);
-      handleGroup.add(bar);
-
-      group.add(handleGroup);
-      group.handles.push(handleGroup);
-    });
+      const loopGeo = new THREE.TorusGeometry(8.5, 1.0, 8, 16);
+      loopGeo.rotateY(Math.PI / 2);
+      const loopMesh = new THREE.Mesh(loopGeo, this.materials.goldLoop);
+      loopMesh.position.set(32, 0, 0);
+      loopGroup.add(loopMesh);
+      group.add(loopGroup);
+    }
 
     return group;
   },
 
   /**
-   * Create a Capybara Character Rig
+   * Create Character with Red Boxing Gloves holding onto the rim
    */
-  createCapybara(colorHex = 0x8d6e63) {
+  createCharacter(slotIndex = 0) {
     const char = new THREE.Group();
-    char.name = "Capybara";
+    char.name = `Character_${slotIndex}`;
 
-    const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 });
-    const snoutMat = this.materials.capySnout;
+    // Select body & snout materials based on slot (matches reference screenshots)
+    let bodyMat, snoutMat, isBear = false;
+    if (slotIndex === 0) {
+      bodyMat = this.materials.hippoBlue;
+      snoutMat = this.materials.snoutBlue;
+    } else if (slotIndex === 1) {
+      bodyMat = this.materials.hippoOrange;
+      snoutMat = this.materials.snoutLight;
+    } else if (slotIndex === 2) {
+      bodyMat = this.materials.hippoGreen;
+      snoutMat = this.materials.snoutGreen;
+    } else {
+      bodyMat = this.materials.bearDark;
+      snoutMat = this.materials.snoutDark;
+      isBear = true;
+    }
 
-    // Main Torso
-    const torsoGeo = new THREE.BoxGeometry(0.68, 0.75, 0.85);
-    torsoGeo.translate(0, 0.45, 0);
+    // Main Torso (leaning slightly toward center of raft)
+    const torsoGeo = new THREE.BoxGeometry(15, 17, 18);
+    torsoGeo.translate(0, 11, 0);
     const torso = new THREE.Mesh(torsoGeo, bodyMat);
     torso.rotation.x = 0.15;
     torso.castShadow = true;
     char.add(torso);
 
-    // Chubby Rear / Butt (Animates on fart!)
-    const buttGeo = new THREE.SphereGeometry(0.46, 12, 12);
-    buttGeo.scale(1.0, 0.9, 1.15);
+    // Chubby Rear / Butt (Animates when farting!)
+    const buttGeo = new THREE.SphereGeometry(10, 12, 12);
+    buttGeo.scale(1.1, 0.95, 1.2);
     const butt = new THREE.Mesh(buttGeo, bodyMat);
-    butt.position.set(0, 0.45, 0.46);
+    butt.position.set(0, 10, 10);
     butt.castShadow = true;
     char.add(butt);
     char.buttMesh = butt;
 
-    // Blunt Rectangular Snout Head
-    const headGeo = new THREE.BoxGeometry(0.52, 0.52, 0.62);
-    headGeo.translate(0, 0.82, -0.42);
+    // Head
+    const headWidth = isBear ? 13 : 14;
+    const headGeo = new THREE.BoxGeometry(headWidth, 12, 13);
+    headGeo.translate(0, 18, -9);
     const head = new THREE.Mesh(headGeo, snoutMat);
     head.castShadow = true;
     char.add(head);
 
-    // Little Rounded Ears
-    const earGeo = new THREE.SphereGeometry(0.12, 8, 8);
+    // Ears
+    const earGeo = new THREE.SphereGeometry(2.5, 8, 8);
     earGeo.scale(0.8, 1.2, 0.5);
     const leftEar = new THREE.Mesh(earGeo, bodyMat);
-    leftEar.position.set(-0.25, 1.12, -0.32);
+    leftEar.position.set(-5.5, 25, -7);
     char.add(leftEar);
 
     const rightEar = new THREE.Mesh(earGeo, bodyMat);
-    rightEar.position.set(0.25, 1.12, -0.32);
+    rightEar.position.set(5.5, 25, -7);
     char.add(rightEar);
 
-    // Dark Bead Eyes
-    const eyeGeo = new THREE.SphereGeometry(0.065, 8, 8);
-    const leftEye = new THREE.Mesh(eyeGeo, this.materials.blackEye);
-    leftEye.position.set(-0.28, 0.92, -0.48);
-    char.add(leftEye);
-
-    const rightEye = new THREE.Mesh(eyeGeo, this.materials.blackEye);
-    rightEye.position.set(0.28, 0.92, -0.48);
-    char.add(rightEye);
-
-    // Front Paws holding handle
-    const pawGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.38, 8);
-    pawGeo.rotateX(Math.PI / 3);
-    const leftPaw = new THREE.Mesh(pawGeo, snoutMat);
-    leftPaw.position.set(-0.24, 0.42, -0.48);
-    char.add(leftPaw);
-
-    const rightPaw = new THREE.Mesh(pawGeo, snoutMat);
-    rightPaw.position.set(0.24, 0.42, -0.48);
-    char.add(rightPaw);
-
-    return char;
-  },
-
-  /**
-   * Create a Hippo Character Rig
-   */
-  createHippo(colorHex = 0x455a64) {
-    const char = new THREE.Group();
-    char.name = "Hippo";
-
-    const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 });
-    const snoutMat = this.materials.hippoSnout;
-
-    // Big Chubby Torso
-    const torsoGeo = new THREE.BoxGeometry(0.76, 0.82, 0.92);
-    torsoGeo.translate(0, 0.48, 0);
-    const torso = new THREE.Mesh(torsoGeo, bodyMat);
-    torso.rotation.x = 0.15;
-    torso.castShadow = true;
-    char.add(torso);
-
-    // Big Hippo Butt
-    const buttGeo = new THREE.SphereGeometry(0.5, 12, 12);
-    buttGeo.scale(1.1, 0.95, 1.18);
-    const butt = new THREE.Mesh(buttGeo, bodyMat);
-    butt.position.set(0, 0.46, 0.5);
-    butt.castShadow = true;
-    char.add(butt);
-    char.buttMesh = butt;
-
-    // Wide Hippo Snout
-    const headGeo = new THREE.BoxGeometry(0.66, 0.48, 0.68);
-    headGeo.translate(0, 0.78, -0.42);
-    const head = new THREE.Mesh(headGeo, snoutMat);
-    head.castShadow = true;
-    char.add(head);
-
-    // Pink Nostril Spheres
-    const nostrilGeo = new THREE.SphereGeometry(0.075, 8, 8);
-    const leftNostril = new THREE.Mesh(nostrilGeo, this.materials.pinkNose);
-    leftNostril.position.set(-0.19, 0.92, -0.72);
-    char.add(leftNostril);
-
-    const rightNostril = new THREE.Mesh(nostrilGeo, this.materials.pinkNose);
-    rightNostril.position.set(0.19, 0.92, -0.72);
-    char.add(rightNostril);
-
     // Eyes
-    const eyeGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const eyeGeo = new THREE.SphereGeometry(1.6, 8, 8);
     const leftEye = new THREE.Mesh(eyeGeo, this.materials.blackEye);
-    leftEye.position.set(-0.31, 0.98, -0.38);
+    leftEye.position.set(-6, 21, -9.5);
     char.add(leftEye);
 
     const rightEye = new THREE.Mesh(eyeGeo, this.materials.blackEye);
-    rightEye.position.set(0.31, 0.98, -0.38);
+    rightEye.position.set(6, 21, -9.5);
     char.add(rightEye);
+
+    // Hippo Nostrils
+    if (!isBear) {
+      const nostrilGeo = new THREE.SphereGeometry(1.5, 6, 6);
+      const leftNose = new THREE.Mesh(nostrilGeo, this.materials.pinkNose);
+      leftNose.position.set(-4, 19, -15.5);
+      char.add(leftNose);
+
+      const rightNose = new THREE.Mesh(nostrilGeo, this.materials.pinkNose);
+      rightNose.position.set(4, 19, -15.5);
+      char.add(rightNose);
+    }
+
+    // RED BOXING-GLOVE PAWS holding onto the rim (from screenshots)
+    const gloveGeo = new THREE.SphereGeometry(3.5, 10, 10);
+    gloveGeo.scale(1.1, 1.0, 1.2);
+
+    const leftGlove = new THREE.Mesh(gloveGeo, this.materials.gloveRed);
+    leftGlove.position.set(-8.5, 9, -13);
+    leftGlove.castShadow = true;
+    char.add(leftGlove);
+
+    const rightGlove = new THREE.Mesh(gloveGeo, this.materials.gloveRed);
+    rightGlove.position.set(8.5, 9, -13);
+    rightGlove.castShadow = true;
+    char.add(rightGlove);
 
     return char;
   },
 
   /**
-   * Spiked Wall Segment (Pixel-scale purple bar lined with sharp white triangular spikes)
+   * Pink / Magenta Spiked Bank Rollers (from screenshots)
    */
-  createSpikeStrip(length = 200, thickness = 20) {
+  createSpikeRoller(length = 200, thickness = 24) {
     const group = new THREE.Group();
-    group.name = "SpikeStrip";
+    group.name = "SpikeRoller";
 
-    const barRadius = thickness * 0.45;
-    const barGeo = new THREE.CylinderGeometry(barRadius, barRadius, length, 12);
-    barGeo.rotateZ(Math.PI / 2);
-    const bar = new THREE.Mesh(barGeo, this.materials.spikePurple);
-    bar.castShadow = true;
-    bar.receiveShadow = true;
-    group.add(bar);
+    const radius = thickness * 0.45;
+    const bodyGeo = new THREE.CylinderGeometry(radius, radius, length, 14);
+    bodyGeo.rotateZ(Math.PI / 2);
+    const bodyMesh = new THREE.Mesh(bodyGeo, this.materials.spikePink);
+    bodyMesh.castShadow = true;
+    bodyMesh.receiveShadow = true;
+    group.add(bodyMesh);
 
-    // Teeth / Spikes pointing outward
-    const spikeRadius = thickness * 0.42;
-    const spikeHeight = thickness * 0.9;
+    // Sharp white cone spikes along the bank facing river
+    const spikeRadius = thickness * 0.4;
+    const spikeHeight = thickness * 0.95;
     const spikeGeo = new THREE.ConeGeometry(spikeRadius, spikeHeight, 8);
     spikeGeo.rotateX(Math.PI / 2);
 
@@ -236,7 +229,7 @@ const ModelFactory = {
     for (let i = 0; i < count; i++) {
       const spike = new THREE.Mesh(spikeGeo, this.materials.spikeWhite);
       const x = -length / 2 + (i + 0.5) * (length / count);
-      spike.position.set(x, 0, barRadius + spikeHeight * 0.4);
+      spike.position.set(x, 0, radius + spikeHeight * 0.42);
       spike.castShadow = true;
       group.add(spike);
     }
@@ -245,42 +238,73 @@ const ModelFactory = {
   },
 
   /**
+   * Grey Spiked Slabs forming gates (from screenshots)
+   */
+  createSpikeSlab(width = 38, height = 60) {
+    const group = new THREE.Group();
+    group.name = "SpikeSlab";
+
+    // Vertical grey rectangular slab
+    const slabGeo = new THREE.BoxGeometry(width, 42, height);
+    slabGeo.translate(0, 21, 0);
+    const slab = new THREE.Mesh(slabGeo, this.materials.slabGrey);
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    group.add(slab);
+
+    // 4 vertical rows of white spikes on the face
+    const spikeGeo = new THREE.ConeGeometry(3.5, 9, 6);
+    spikeGeo.rotateX(-Math.PI / 2);
+
+    for (let y = 8; y <= 34; y += 9) {
+      for (let z = -height / 2 + 10; z < height / 2; z += 14) {
+        const spike = new THREE.Mesh(spikeGeo, this.materials.spikeWhite);
+        spike.position.set(width / 2 + 4, y, z);
+        spike.castShadow = true;
+        group.add(spike);
+      }
+    }
+
+    return group;
+  },
+
+  /**
    * Rotating Spiked Windmill / Turnstile (Pixel-scale 4-Arm Cross)
    */
-  createSpikedWindmill(radius = 64) {
+  createSpikedWindmill(radius = 72) {
     const group = new THREE.Group();
     group.name = "SpikedWindmill";
 
     // Center Vertical Pillar
-    const poleGeo = new THREE.CylinderGeometry(9, 11, 46, 12);
+    const poleGeo = new THREE.CylinderGeometry(9, 11, 48, 12);
     const pole = new THREE.Mesh(poleGeo, this.materials.woodDark);
-    pole.position.y = 23;
+    pole.position.y = 24;
     pole.castShadow = true;
     group.add(pole);
 
     // Rotating Cross Rotor
     const rotor = new THREE.Group();
-    rotor.position.y = 14;
+    rotor.position.y = 15;
 
-    const armGeo = new THREE.CylinderGeometry(4, 4, radius, 8);
+    const armGeo = new THREE.CylinderGeometry(4.5, 4.5, radius, 8);
     armGeo.rotateZ(Math.PI / 2);
 
-    const spikeGeo = new THREE.ConeGeometry(3.5, 9, 6);
+    const spikeGeo = new THREE.ConeGeometry(3.8, 10, 6);
     spikeGeo.rotateX(-Math.PI / 2);
 
     for (let a = 0; a < 4; a++) {
       const armGroup = new THREE.Group();
       armGroup.rotation.y = a * (Math.PI / 2);
 
-      const arm = new THREE.Mesh(armGeo, this.materials.spikePurple);
+      const arm = new THREE.Mesh(armGeo, this.materials.spikePink);
       arm.position.x = radius / 2;
       arm.castShadow = true;
       armGroup.add(arm);
 
       // Add spikes along arm
-      for (let s = 14; s < radius - 4; s += 14) {
+      for (let s = 14; s < radius - 4; s += 15) {
         const spike = new THREE.Mesh(spikeGeo, this.materials.spikeWhite);
-        spike.position.set(s, 0, 4.5);
+        spike.position.set(s, 0, 5);
         spike.castShadow = true;
         armGroup.add(spike);
       }
@@ -296,7 +320,7 @@ const ModelFactory = {
   /**
    * Oscillating Spiked Horizontal Roller (Pixel-scale)
    */
-  createSpikedRoller(width = 80, height = 24) {
+  createSpikedRoller(width = 76, height = 24) {
     const group = new THREE.Group();
     group.name = "SpikedRoller";
 
@@ -325,7 +349,7 @@ const ModelFactory = {
     const rollerRadius = height * 0.42;
     const rollerGeo = new THREE.CylinderGeometry(rollerRadius, rollerRadius, width, 14);
     rollerGeo.rotateZ(Math.PI / 2);
-    const rollerMesh = new THREE.Mesh(rollerGeo, this.materials.spikePurple);
+    const rollerMesh = new THREE.Mesh(rollerGeo, this.materials.spikePink);
     rollerMesh.castShadow = true;
     roller.add(rollerMesh);
 
@@ -348,96 +372,9 @@ const ModelFactory = {
   },
 
   /**
-   * Speed Boost Chevron Arrow on Water Surface
-   */
-  createSpeedChevron() {
-    const group = new THREE.Group();
-    group.name = "SpeedChevron";
-
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.2, -0.6);
-    shape.lineTo(0, 0.4);
-    shape.lineTo(1.2, -0.6);
-    shape.lineTo(1.2, -0.1);
-    shape.lineTo(0, 0.9);
-    shape.lineTo(-1.2, -0.1);
-    shape.closePath();
-
-    const geo = new THREE.ShapeGeometry(shape);
-    geo.rotateX(-Math.PI / 2);
-    const mesh = new THREE.Mesh(geo, this.materials.boostRed);
-    mesh.position.y = 0.5;
-    group.add(mesh);
-
-    const mesh2 = mesh.clone();
-    mesh2.position.z = -1.2;
-    group.add(mesh2);
-
-    return group;
-  },
-
-  /**
-   * Checkpoint Wooden Archway with Banner
-   */
-  createCheckpointArch(bannerText = "CHECK POINT") {
-    const group = new THREE.Group();
-    group.name = "CheckpointArch";
-
-    // Side Posts (base width between posts is 13 units)
-    const postGeo = new THREE.CylinderGeometry(0.4, 0.45, 6.0, 8);
-    const leftPost = new THREE.Mesh(postGeo, this.materials.woodBrown);
-    leftPost.position.set(-6.5, 3.0, 0);
-    leftPost.castShadow = true;
-    group.add(leftPost);
-
-    const rightPost = new THREE.Mesh(postGeo, this.materials.woodBrown);
-    rightPost.position.set(6.5, 3.0, 0);
-    rightPost.castShadow = true;
-    group.add(rightPost);
-
-    // Overhead Crossbeam
-    const beamGeo = new THREE.BoxGeometry(14.0, 0.6, 0.6);
-    const beam = new THREE.Mesh(beamGeo, this.materials.woodBrown);
-    beam.position.set(0, 5.5, 0);
-    beam.castShadow = true;
-    group.add(beam);
-
-    // Wooden Banner Board
-    const bannerGeo = new THREE.BoxGeometry(10.5, 1.8, 0.2);
-    const banner = new THREE.Mesh(bannerGeo, this.materials.bannerYellow);
-    banner.position.set(0, 4.4, 0);
-    banner.castShadow = true;
-    group.add(banner);
-
-    // Banner Text using Canvas Texture
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 128;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fbc02d";
-    ctx.fillRect(0, 0, 512, 128);
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = "#3e2723";
-    ctx.strokeRect(6, 6, 500, 116);
-    ctx.font = "bold 52px sans-serif";
-    ctx.fillStyle = "#3e2723";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(bannerText, 256, 64);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const textMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(10.2, 1.6), textMat);
-    textMesh.position.set(0, 4.4, 0.12);
-    group.add(textMesh);
-
-    return group;
-  },
-
-  /**
    * Desert Rock / Boulder Hazard (Pixel-scale)
    */
-  createBoulder(radius = 24) {
+  createBoulder(radius = 22) {
     const geo = new THREE.DodecahedronGeometry(radius, 1);
     const mesh = new THREE.Mesh(geo, this.materials.rockGrey);
     mesh.scale.set(1.1, 1.25, 1.05);
@@ -445,6 +382,154 @@ const ModelFactory = {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
+  },
+
+  /**
+   * START & FINISH Bamboo Arches with Palm Thatch & Signboard (from screenshots)
+   */
+  createGateArch(width = 460, text = "START") {
+    const group = new THREE.Group();
+    group.name = `GateArch_${text}`;
+
+    const halfW = width / 2;
+    const archH = 80;
+
+    // Bamboo Side Posts
+    const postGeo = new THREE.CylinderGeometry(5, 6, archH, 8);
+    const leftPost = new THREE.Mesh(postGeo, this.materials.woodBamboo);
+    leftPost.position.set(-halfW + 15, archH / 2, 0);
+    leftPost.castShadow = true;
+    group.add(leftPost);
+
+    const rightPost = new THREE.Mesh(postGeo, this.materials.woodBamboo);
+    rightPost.position.set(halfW - 15, archH / 2, 0);
+    rightPost.castShadow = true;
+    group.add(rightPost);
+
+    // Top Bamboo Crossbeams
+    const beamGeo = new THREE.CylinderGeometry(5, 5, width, 8);
+    beamGeo.rotateZ(Math.PI / 2);
+    const topBeam = new THREE.Mesh(beamGeo, this.materials.woodBamboo);
+    topBeam.position.set(0, archH - 6, 0);
+    topBeam.castShadow = true;
+    group.add(topBeam);
+
+    // Palm Thatch / Straw Roof on top of posts
+    for (const side of [-1, 1]) {
+      const thatchGeo = new THREE.ConeGeometry(16, 20, 8);
+      const thatch = new THREE.Mesh(thatchGeo, this.materials.thatchPalm);
+      thatch.position.set(side * (halfW - 15), archH + 6, 0);
+      group.add(thatch);
+    }
+
+    // Wooden Signboard with Bold Text
+    const boardW = Math.min(width * 0.65, 260);
+    const boardH = 38;
+    const boardGeo = new THREE.BoxGeometry(boardW, boardH, 4);
+    const boardMesh = new THREE.Mesh(boardGeo, this.materials.thatchPalm);
+    boardMesh.position.set(0, archH - 22, 0);
+    boardMesh.castShadow = true;
+    group.add(boardMesh);
+
+    // Canvas Texture for Signboard Text
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fbc02d";
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = "#3e2723";
+    ctx.strokeRect(6, 6, 500, 116);
+    ctx.font = "bold 68px sans-serif";
+    ctx.fillStyle = "#263238";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 256, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const textMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+    const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(boardW * 0.95, boardH * 0.9), textMat);
+    textMesh.position.set(0, archH - 22, 2.5);
+    group.add(textMesh);
+
+    return group;
+  },
+
+  /**
+   * Lily Pad with Pink Lotus Flower for Start Pool (from screenshots)
+   */
+  createLilyPad() {
+    const group = new THREE.Group();
+    group.name = "LilyPad";
+
+    // Round green disc
+    const padGeo = new THREE.CylinderGeometry(14, 14, 0.4, 16);
+    const pad = new THREE.Mesh(padGeo, this.materials.lilyGreen);
+    pad.position.y = 0.2;
+    group.add(pad);
+
+    // Pink Lotus Flower
+    const flowerGeo = new THREE.ConeGeometry(5, 6, 6);
+    flowerGeo.rotateX(Math.PI);
+    const flower = new THREE.Mesh(flowerGeo, this.materials.flowerPink);
+    flower.position.set(0, 4, 0);
+    group.add(flower);
+
+    const centerGeo = new THREE.SphereGeometry(2, 6, 6);
+    const center = new THREE.Mesh(centerGeo, this.materials.flowerYellow);
+    center.position.set(0, 3.5, 0);
+    group.add(center);
+
+    return group;
+  },
+
+  /**
+   * Speed Boost Chevron Arrow on Water Surface (Red & White)
+   */
+  createSpeedChevron() {
+    const group = new THREE.Group();
+    group.name = "SpeedChevron";
+
+    const shape = new THREE.Shape();
+    shape.moveTo(-16, -8);
+    shape.lineTo(0, 12);
+    shape.lineTo(16, -8);
+    shape.lineTo(16, -1);
+    shape.lineTo(0, 19);
+    shape.lineTo(-16, -1);
+    shape.closePath();
+
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, this.materials.boostRed);
+    mesh.position.y = 0.6;
+    group.add(mesh);
+
+    // Inner White Stripe
+    const shapeInner = new THREE.Shape();
+    shapeInner.moveTo(-12, -7);
+    shapeInner.lineTo(0, 8);
+    shapeInner.lineTo(12, -7);
+    shapeInner.lineTo(12, -4);
+    shapeInner.lineTo(0, 11);
+    shapeInner.lineTo(-12, -4);
+    shapeInner.closePath();
+
+    const geoInner = new THREE.ShapeGeometry(shapeInner);
+    geoInner.rotateX(-Math.PI / 2);
+    const innerMesh = new THREE.Mesh(geoInner, this.materials.boostWhite);
+    innerMesh.position.y = 0.7;
+    group.add(innerMesh);
+
+    // Second Chevron
+    const group2 = group.clone();
+    group2.position.z = -22;
+
+    const chevronPair = new THREE.Group();
+    chevronPair.add(group);
+    chevronPair.add(group2);
+    return chevronPair;
   }
 };
 
