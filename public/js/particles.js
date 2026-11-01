@@ -1,6 +1,7 @@
 /**
  * We Fart Together — Particle Systems Engine
  * High-performance instanced / pooled particles for Fart Jets, Water Wake Rings, and Explosions.
+ * Sized and tuned for the pixel-scale world coordinates (raft radius 55px).
  */
 
 class ParticleEngine {
@@ -10,20 +11,20 @@ class ParticleEngine {
     this.wakeRings = [];
     this.explosionParticles = [];
 
-    // Fart Particle Geometry & Material
-    this.fartGeo = new THREE.DodecahedronGeometry(0.28, 1);
+    // Fart Particle Geometry & Material (Pixel-scale neon green puffs)
+    this.fartGeo = new THREE.DodecahedronGeometry(5.5, 1);
     this.fartMat = new THREE.MeshStandardMaterial({
       color: 0x76ff03,
       emissive: 0x33691e,
-      roughness: 0.4,
+      roughness: 0.3,
       metalness: 0.1,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
       flatShading: true
     });
 
-    // Wake Ring Geometry & Material (Thin ring on water plane)
-    this.ringGeo = new THREE.RingGeometry(1.6, 1.85, 32);
+    // Wake Ring Geometry & Material (Expanding white water ripple ring)
+    this.ringGeo = new THREE.RingGeometry(46, 52, 32);
     this.ringGeo.rotateX(-Math.PI / 2);
     this.ringMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -34,18 +35,21 @@ class ParticleEngine {
     });
 
     // Explosion Particle Geometry
-    this.debrisGeo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+    this.debrisGeo = new THREE.BoxGeometry(4.5, 4.5, 4.5);
     this.debrisMat = new THREE.MeshStandardMaterial({
       color: 0xffeb3b,
       roughness: 0.3,
       flatShading: true
     });
+
+    // Smoke puff geometry for explosions
+    this.smokeGeo = new THREE.DodecahedronGeometry(8.0, 1);
   }
 
   /**
    * Spawn a burst of neon-green fart gas from a character's rear end
    */
-  emitFart(position, direction, speed = 8.0, count = 3) {
+  emitFart(position, direction, speed = 140.0, count = 4) {
     for (let i = 0; i < count; i++) {
       const mesh = new THREE.Mesh(this.fartGeo, this.fartMat.clone());
       mesh.position.copy(position);
@@ -55,13 +59,13 @@ class ParticleEngine {
       const vel = direction.clone()
         .add(new THREE.Vector3(
           (Math.random() - 0.5) * spread,
-          (Math.random() * 0.2),
+          (Math.random() * 0.25) + 0.1,
           (Math.random() - 0.5) * spread
         ))
         .normalize()
-        .multiplyScalar(speed * (0.8 + Math.random() * 0.4));
+        .multiplyScalar(speed * (0.8 + Math.random() * 0.45));
 
-      mesh.scale.setScalar(0.7 + Math.random() * 0.6);
+      mesh.scale.setScalar(0.8 + Math.random() * 0.5);
 
       this.scene.add(mesh);
       this.fartParticles.push({
@@ -77,15 +81,15 @@ class ParticleEngine {
   /**
    * Spawn an expanding white water wake ring beneath the raft
    */
-  emitWake(position, startRadius = 1.6) {
+  emitWake(position, startRadius = 50) {
     const mesh = new THREE.Mesh(this.ringGeo, this.ringMat.clone());
-    mesh.position.set(position.x, position.y + 0.05, position.z);
-    mesh.scale.setScalar(startRadius / 1.7);
+    mesh.position.set(position.x, 0.4, position.z);
+    mesh.scale.setScalar(startRadius / 50);
 
     this.scene.add(mesh);
     this.wakeRings.push({
       mesh: mesh,
-      radius: startRadius / 1.7,
+      radius: startRadius / 50,
       life: 0.0,
       maxLife: 1.2
     });
@@ -95,7 +99,6 @@ class ParticleEngine {
    * Spawn cartoon skull explosion / raft pop
    */
   emitExplosion(position) {
-    // Yellow & Orange Debris
     const colors = [0xffeb3b, 0xff7043, 0xffffff, 0x76ff03];
     for (let i = 0; i < 28; i++) {
       const mat = this.debrisMat.clone();
@@ -104,9 +107,9 @@ class ParticleEngine {
       mesh.position.copy(position);
 
       const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * 16,
-        Math.random() * 14 + 4,
-        (Math.random() - 0.5) * 16
+        (Math.random() - 0.5) * 160,
+        Math.random() * 140 + 40,
+        (Math.random() - 0.5) * 160
       );
 
       this.scene.add(mesh);
@@ -124,21 +127,21 @@ class ParticleEngine {
       const smokeMat = this.fartMat.clone();
       smokeMat.color.setHex(0xffffff);
       smokeMat.opacity = 0.9;
-      const mesh = new THREE.Mesh(this.fartGeo, smokeMat);
+      const mesh = new THREE.Mesh(this.smokeGeo, smokeMat);
       mesh.position.copy(position).add(new THREE.Vector3(
-        (Math.random() - 0.5) * 1.5,
-        Math.random() * 1.5,
-        (Math.random() - 0.5) * 1.5
+        (Math.random() - 0.5) * 15,
+        Math.random() * 15 + 5,
+        (Math.random() - 0.5) * 15
       ));
-      mesh.scale.setScalar(1.5 + Math.random() * 1.5);
+      mesh.scale.setScalar(1.2 + Math.random() * 1.2);
 
       this.scene.add(mesh);
       this.explosionParticles.push({
         mesh: mesh,
-        velocity: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 4 + 2, (Math.random() - 0.5) * 3),
+        velocity: new THREE.Vector3((Math.random() - 0.5) * 30, Math.random() * 40 + 20, (Math.random() - 0.5) * 30),
         rotSpeed: new THREE.Vector3(1, 1, 1),
         life: 0.0,
-        maxLife: 0.7,
+        maxLife: 0.75,
         isSmoke: true
       });
     }
@@ -163,16 +166,16 @@ class ParticleEngine {
       // Physics: Move, expand, and rise slightly
       p.mesh.position.addScaledVector(p.velocity, dt);
       p.velocity.multiplyScalar(0.92); // Drag
-      p.velocity.y += 0.8 * dt; // Buoyancy
+      p.velocity.y += 18.0 * dt; // Buoyancy rising
 
       p.mesh.rotation.x += p.rotSpeed * dt;
       p.mesh.rotation.y += p.rotSpeed * dt;
 
       // Expand & Fade
       const progress = p.life / p.maxLife;
-      const scale = (1.0 + progress * 2.2);
+      const scale = 1.0 + progress * 2.4;
       p.mesh.scale.set(scale, scale, scale);
-      p.mesh.material.opacity = (1.0 - progress) * 0.85;
+      p.mesh.material.opacity = (1.0 - progress) * 0.88;
     }
 
     // Update Water Wake Rings
@@ -187,7 +190,7 @@ class ParticleEngine {
       }
 
       const progress = r.life / r.maxLife;
-      r.radius += dt * 1.4;
+      r.radius += dt * 0.8;
       r.mesh.scale.setScalar(r.radius);
       r.mesh.material.opacity = (1.0 - progress) * 0.65;
     }
@@ -205,13 +208,13 @@ class ParticleEngine {
 
       p.mesh.position.addScaledVector(p.velocity, dt);
       if (!p.isSmoke) {
-        p.velocity.y -= 25.0 * dt; // Gravity on debris
+        p.velocity.y -= 220.0 * dt; // Gravity on debris
         p.mesh.rotation.x += p.rotSpeed.x * dt;
         p.mesh.rotation.y += p.rotSpeed.y * dt;
       } else {
-        p.velocity.multiplyScalar(0.9);
+        p.velocity.multiplyScalar(0.92);
         const progress = p.life / p.maxLife;
-        const scale = (1.0 + progress * 3.0);
+        const scale = 1.0 + progress * 2.8;
         p.mesh.scale.setScalar(scale);
         p.mesh.material.opacity = (1.0 - progress) * 0.9;
       }

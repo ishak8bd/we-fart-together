@@ -483,7 +483,8 @@ class GameRoom {
     const dirX = dx / len;
     const dirY = dy / len;
 
-    const currentForce = 0.0016 * this.levelData.currentSpeed;
+    // Gentle passive water flow (doesn't rush downstream without farting)
+    const currentForce = 0.00035 * this.levelData.currentSpeed;
     Matter.Body.applyForce(this.raft, this.raft.position, {
       x: dirX * currentForce,
       y: dirY * currentForce
@@ -496,7 +497,7 @@ class GameRoom {
   applyFartForces() {
     const raftPos = this.raft.position;
     const raftAngle = this.raft.angle;
-    const baseFartPower = 0.0065;
+    const baseFartPower = 0.016; // Powerful, satisfying fart propulsion!
 
     for (const h of this.players) {
       if (h.isFarting) {

@@ -492,6 +492,9 @@ class ClientGameApp {
           x: s0.raft.x + (s1.raft.x - s0.raft.x) * factor,
           y: s0.raft.y + (s1.raft.y - s0.raft.y) * factor,
           angle: this.lerpAngle(s0.raft.angle, s1.raft.angle, factor),
+          vx: (s0.raft.vx || 0) + ((s1.raft.vx || 0) - (s0.raft.vx || 0)) * factor,
+          vy: (s0.raft.vy || 0) + ((s1.raft.vy || 0) - (s0.raft.vy || 0)) * factor,
+          vRot: (s0.raft.vRot || 0) + ((s1.raft.vRot || 0) - (s0.raft.vRot || 0)) * factor,
           isDead: s1.raft.isDead
         };
 
@@ -504,6 +507,7 @@ class ClientGameApp {
             angle: this.lerpAngle(h0.angle, h1.angle, factor),
             isFarting: h1.isFarting,
             fartCharge: h1.fartCharge,
+            connected: h1.connected,
             color: h1.color
           };
         });
